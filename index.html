@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shopee Aff Link Converter</title>
+  <script src="config.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+
+    h1 { font-size: 22px; font-weight: 700; color: #ee4d2d; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 24px; }
+
+    .config-banner {
+      width: 100%;
+      max-width: 680px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .config-ok  { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+    .config-err { background: #fce4ec; color: #b71c1c; border: 1px solid #ef9a9a; }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 24px;
+      width: 100%;
+      max-width: 680px;
+      margin-bottom: 16px;
+    }
+
+    label { display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 6px; }
+
+    textarea, input[type="text"] {
+      width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      color: #222;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    textarea:focus, input[type="text"]:focus { border-color: #ee4d2d; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary   { background: #ee4d2d; color: #fff; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .btn-copy      { background: #4caf50; color: #fff; font-size: 12px; padding: 6px 12px; }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+
+    .result-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 16px; }
+    .result-table th {
+      background: #fef2ef; color: #ee4d2d;
+      padding: 8px 12px; text-align: left;
+      font-weight: 600; border-bottom: 2px solid #ee4d2d22;
+    }
+    .result-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+    .result-table tr:last-child td { border-bottom: none; }
+    .result-table tr:hover td { background: #fafafa; }
+
+    .link-cell { word-break: break-all; font-family: monospace; font-size: 12px; color: #1a73e8; }
+    .orig-cell { word-break: break-all; font-size: 12px; color: #666; }
+
+    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .badge-ok   { background: #e8f5e9; color: #2e7d32; }
+    .badge-err  { background: #fce4ec; color: #b71c1c; }
+    .badge-wait { background: #e3f2fd; color: #1565c0; }
+
+    .progress-bar-wrap { width: 100%; height: 4px; background: #f0f0f0; border-radius: 2px; margin-top: 12px; overflow: hidden; display: none; }
+    .progress-bar { height: 100%; background: #ee4d2d; width: 0%; transition: width 0.3s ease; border-radius: 2px; }
+
+    .section-title { font-size: 15px; font-weight: 700; color: #333; margin-bottom: 14px; }
+
+    #single-result-box {
+      margin-top: 14px; padding: 14px;
+      background: #f9f9f9; border-radius: 8px; border: 1px solid #eee;
+      display: none;
+    }
+    .result-aff-link { font-family: monospace; font-size: 14px; color: #ee4d2d; font-weight: 600; word-break: break-all; margin-bottom: 10px; }
+    .result-meta { font-size: 11px; color: #999; margin-bottom: 8px; }
+
+    #bulk-output-section { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Shopee Aff Link Converter</h1>
+  <p class="subtitle">Tự động chuyển link Shopee → link affiliate của bạn</p>
+
+  <div id="config-banner" class="config-banner config-err">
+    ⚠️ Chưa cấu hình API — vui lòng điền <code>app_id</code> và <code>secret</code> vào <b>config.js</b>
+  </div>
+
+  <!-- Single -->
+  <div class="card">
+    <div class="section-title">Chuyển đổi 1 link</div>
+    <label for="single-input">Dán link Shopee (link sản phẩm hoặc short link s.shopee.vn)</label>
+    <input type="text" id="single-input" placeholder="https://shopee.vn/... hoặc https://s.shopee.vn/..." />
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-single" onclick="convertSingle()">Tạo link aff</button>
+      <button class="btn btn-secondary" onclick="clearSingle()">Xóa</button>
+    </div>
+    <div id="single-result-box">
+      <div class="result-meta" id="single-meta"></div>
+      <div class="result-aff-link" id="single-aff-link"></div>
+      <button class="btn btn-copy" id="btn-copy-single">Sao chép</button>
+    </div>
+    <div id="single-error" style="color:#e53935;font-size:13px;margin-top:10px;display:none;"></div>
+  </div>
+
+  <!-- Bulk -->
+  <div class="card">
+    <div class="section-title">Chuyển đổi nhiều link cùng lúc</div>
+    <label for="bulk-input">Dán nhiều link (mỗi link 1 dòng)</label>
+    <textarea id="bulk-input" rows="6" placeholder="https://s.shopee.vn/xxxxx&#10;https://shopee.vn/product-b&#10;https://s.shopee.vn/yyyyy"></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-bulk" onclick="convertBulk()">Tạo tất cả link aff</button>
+      <button class="btn btn-secondary" onclick="clearBulk()">Xóa</button>
+      <button class="btn btn-secondary" onclick="copyAllLinks()">Sao chép tất cả</button>
+      <button class="btn btn-secondary" onclick="exportCsv()">Export CSV</button>
+    </div>
+    <div class="progress-bar-wrap" id="progress-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+  </div>
+
+  <!-- Bulk results -->
+  <div class="card" id="bulk-output-section">
+    <div class="section-title">Kết quả (<span id="result-count">0</span> link)</div>
+    <table class="result-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Link gốc</th>
+          <th>Link aff của bạn</th>
+          <th>Trạng thái</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="result-tbody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    // ────────────────────────────────────────────────────────────
+    // Config validation
+    // ────────────────────────────────────────────────────────────
+    function isConfigured() {
+      return typeof CONFIG !== 'undefined'
+        && CONFIG.app_id && CONFIG.app_id.trim() !== ''
+        && CONFIG.secret && CONFIG.secret.trim() !== '';
+    }
+
+    function initBanner() {
+      const banner = document.getElementById('config-banner');
+      if (isConfigured()) {
+        banner.className = 'config-banner config-ok';
+        banner.textContent = '✓ Đã cấu hình API — App ID: ' + CONFIG.app_id;
+      }
+      // Disable buttons if not configured
+      const btns = document.querySelectorAll('#btn-single, #btn-bulk');
+      btns.forEach(b => b.disabled = !isConfigured());
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Parse Shopee URL → { shopId, itemId }
+    // ────────────────────────────────────────────────────────────
+    function parseShopeeUrl(url) {
+      try {
+        url = url.trim();
+        const u = new URL(url);
+        const host = u.hostname.replace('www.', '');
+
+        if (host === 's.shopee.vn' || host === 'shp.ee') {
+          return { type: 'short', url };
+        }
+        if (!host.includes('shopee.')) {
+          return { type: 'error', msg: 'Không phải link Shopee' };
+        }
+
+        const productPath = u.pathname.match(/\/product\/(\d+)\/(\d+)/);
+        if (productPath) return { type: 'ok', shopId: productPath[1], itemId: productPath[2] };
+
+        const slugMatch = u.pathname.match(/-i\.(\d+)\.(\d+)(?:$|[?#])/);
+        if (slugMatch) return { type: 'ok', shopId: slugMatch[1], itemId: slugMatch[2] };
+
+        const shopId = u.searchParams.get('shopid') || u.searchParams.get('shopId');
+        const itemId = u.searchParams.get('itemid') || u.searchParams.get('itemId');
+        if (shopId && itemId) return { type: 'ok', shopId, itemId };
+
+        return { type: 'error', msg: 'Không tìm thấy ID sản phẩm trong link' };
+      } catch {
+        return { type: 'error', msg: 'URL không hợp lệ' };
+      }
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Resolve short link via CORS proxy
+    // ────────────────────────────────────────────────────────────
+    async function resolveShortLink(shortUrl) {
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(shortUrl)}`;
+      const resp = await fetch(proxyUrl, {
+        signal: AbortSignal.timeout(CONFIG.request_timeout_ms || 10000)
+      });
+      if (!resp.ok) throw new Error('Proxy lỗi ' + resp.status);
+      const data = await resp.json();
+      const finalUrl = data?.status?.url;
+      if (finalUrl) return finalUrl;
+      const html = data?.contents || '';
+      const canonical =
+        html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1] ||
+        html.match(/property=["']og:url["'][^>]+content=["']([^"']+)["']/i)?.[1];
+      if (canonical) return canonical;
+      throw new Error('Không đọc được URL cuối từ short link');
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Shopee Affiliate Open API — generate link
+    // Docs: https://affiliate.shopee.vn/open-api
+    // ────────────────────────────────────────────────────────────
+    async function generateAffLink(productUrl) {
+      const query = `
+        mutation generateShortLink($input: GenerateShortLinkInput!) {
+          generateShortLink(input: $input) {
+            shortLink
+            longLink
+          }
+        }
+      `;
+
+      const variables = {
+        input: {
+          originUrl: productUrl,
+          subIds:  CONFIG.sub_id ? [CONFIG.sub_id] : [],
+        }
+      };
+
+      const resp = await fetch(CONFIG.api_endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CONFIG.app_id}`,
+          'X-App-Id': CONFIG.app_id,
+          'X-Secret': CONFIG.secret,
+        },
+        body: JSON.stringify({ query, variables }),
+        signal: AbortSignal.timeout(CONFIG.request_timeout_ms || 10000),
+      });
+
+      if (!resp.ok) throw new Error('API lỗi HTTP ' + resp.status);
+
+      const json = await resp.json();
+
+      if (json.errors?.length) {
+        throw new Error(json.errors[0].message || 'API trả về lỗi');
+      }
+
+      const result = json?.data?.generateShortLink;
+      if (!result) throw new Error('API không trả về link');
+
+      return CONFIG.link_type === 'short' ? result.shortLink : result.longLink;
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Full pipeline: raw URL → aff link
+    // ────────────────────────────────────────────────────────────
+    async function processUrl(rawUrl) {
+      let url = rawUrl.trim();
+      if (!url) throw new Error('Link trống');
+
+      let parsed = parseShopeeUrl(url);
+
+      // Resolve short link first
+      if (parsed.type === 'short') {
+        const resolved = await resolveShortLink(url);
+        parsed = parseShopeeUrl(resolved);
+        if (parsed.type === 'short') throw new Error('Short link dẫn đến short link khác');
+      }
+
+      if (parsed.type === 'error') throw new Error(parsed.msg);
+
+      const cleanUrl = `https://shopee.vn/product/${parsed.shopId}/${parsed.itemId}`;
+      const affLink  = await generateAffLink(cleanUrl);
+
+      return { shopId: parsed.shopId, itemId: parsed.itemId, cleanUrl, affLink };
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Single UI
+    // ────────────────────────────────────────────────────────────
+    async function convertSingle() {
+      if (!isConfigured()) return;
+
+      const input = document.getElementById('single-input').value.trim();
+      const box   = document.getElementById('single-result-box');
+      const err   = document.getElementById('single-error');
+      const btn   = document.getElementById('btn-single');
+
+      box.style.display = 'none';
+      err.style.display = 'none';
+
+      if (!input) { showErr(err, 'Vui lòng dán link vào ô trên.'); return; }
+
+      btn.textContent = 'Đang xử lý...';
+      btn.disabled = true;
+
+      try {
+        const { shopId, itemId, affLink } = await processUrl(input);
+        document.getElementById('single-meta').textContent =
+          `Shop ID: ${shopId}  |  Item ID: ${itemId}`;
+        document.getElementById('single-aff-link').textContent = affLink;
+        box.style.display = 'block';
+
+        document.getElementById('btn-copy-single').onclick = () => {
+          copyText(affLink, document.getElementById('btn-copy-single'));
+        };
+      } catch (e) {
+        showErr(err, e.message);
+      } finally {
+        btn.textContent = 'Tạo link aff';
+        btn.disabled = false;
+      }
+    }
+
+    function clearSingle() {
+      document.getElementById('single-input').value = '';
+      document.getElementById('single-result-box').style.display = 'none';
+      document.getElementById('single-error').style.display = 'none';
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Bulk UI
+    // ────────────────────────────────────────────────────────────
+    let bulkResults = [];
+
+    async function convertBulk() {
+      if (!isConfigured()) return;
+
+      const lines = document.getElementById('bulk-input').value
+        .split('\n').map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return;
+
+      const tbody     = document.getElementById('result-tbody');
+      const section   = document.getElementById('bulk-output-section');
+      const pWrap     = document.getElementById('progress-wrap');
+      const pBar      = document.getElementById('progress-bar');
+      const countSpan = document.getElementById('result-count');
+      const btn       = document.getElementById('btn-bulk');
+
+      tbody.innerHTML = '';
+      bulkResults = [];
+      section.style.display = 'block';
+      pWrap.style.display = 'block';
+      pBar.style.width = '0%';
+      countSpan.textContent = lines.length;
+      btn.disabled = true;
+      btn.textContent = 'Đang xử lý...';
+
+      const concurrency = CONFIG.bulk_concurrency || 2;
+      const delay       = CONFIG.bulk_delay_ms    || 500;
+
+      // Pre-fill table with "waiting" rows
+      const rows = lines.map((url, i) => {
+        const tr = document.createElement('tr');
+        tr.id = 'row-' + i;
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td class="orig-cell">${truncate(url, 45)}</td>
+          <td>—</td>
+          <td><span class="status-badge badge-wait">Đợi...</span></td>
+          <td></td>`;
+        tbody.appendChild(tr);
+        return tr;
+      });
+
+      let done = 0;
+
+      async function processOne(i) {
+        const url = lines[i];
+        const tr  = rows[i];
+        const cells = tr.querySelectorAll('td');
+
+        cells[3].innerHTML = '<span class="status-badge badge-wait">Đang xử lý...</span>';
+
+        let result;
+        try {
+          const { shopId, itemId, affLink } = await processUrl(url);
+          result = { original: url, affLink, shopId, itemId, ok: true };
+          cells[2].innerHTML = `<span class="link-cell">${affLink}</span>`;
+          cells[3].innerHTML = '<span class="status-badge badge-ok">OK</span>';
+          cells[4].innerHTML = `<button class="btn btn-copy" onclick="copyText('${affLink}',this)">Copy</button>`;
+        } catch (e) {
+          result = { original: url, affLink: null, error: e.message, ok: false };
+          cells[2].innerHTML = `<span style="color:#e53935;font-size:12px;">${e.message}</span>`;
+          cells[3].innerHTML = '<span class="status-badge badge-err">Lỗi</span>';
+        }
+
+        bulkResults[i] = result;
+        done++;
+        pBar.style.width = (done / lines.length * 100) + '%';
+      }
+
+      // Process with limited concurrency
+      for (let i = 0; i < lines.length; i += concurrency) {
+        const batch = lines.slice(i, i + concurrency).map((_, j) => processOne(i + j));
+        await Promise.all(batch);
+        if (i + concurrency < lines.length) await sleep(delay);
+      }
+
+      pWrap.style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = 'Tạo tất cả link aff';
+    }
+
+    function clearBulk() {
+      document.getElementById('bulk-input').value = '';
+      document.getElementById('result-tbody').innerHTML = '';
+      document.getElementById('bulk-output-section').style.display = 'none';
+      bulkResults = [];
+    }
+
+    function copyAllLinks() {
+      const links = bulkResults.filter(r => r?.ok).map(r => r.affLink).join('\n');
+      if (!links) return alert('Chưa có link nào để sao chép.');
+      navigator.clipboard.writeText(links).then(() =>
+        alert(`Đã sao chép ${bulkResults.filter(r => r?.ok).length} link!`)
+      );
+    }
+
+    function exportCsv() {
+      if (!bulkResults.length) return;
+      const rows = [['#', 'Link gốc', 'Link aff', 'Trạng thái']];
+      bulkResults.forEach((r, i) => {
+        if (r) rows.push([i + 1, r.original, r.affLink || '', r.ok ? 'OK' : r.error]);
+      });
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'shopee-aff-links.csv';
+      a.click();
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Helpers
+    // ────────────────────────────────────────────────────────────
+    function copyText(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Đã sao chép!';
+        setTimeout(() => btn.textContent = orig, 1500);
+      });
+    }
+
+    function showErr(el, msg) {
+      el.textContent = 'Lỗi: ' + msg;
+      el.style.display = 'block';
+    }
+
+    function truncate(str, n) {
+      return str.length > n ? str.slice(0, n) + '…' : str;
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    document.getElementById('single-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') convertSingle();
+    });
+
+    // Init on load
+    initBanner();
+  </script>
+</body>
+</html>
