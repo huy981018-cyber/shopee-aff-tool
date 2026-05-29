@@ -27,24 +27,36 @@ export default async function handler(req, res) {
   const afEncToken = req.headers['x-af-enc-token'] || '';
   const afEncDat   = req.headers['x-af-enc-dat']   || '';
 
+  // Đọc raw body vì Vercel không tự parse JSON cho serverless functions
+  const rawBody = await new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => data += chunk);
+    req.on('end',  () => resolve(data));
+    req.on('error', reject);
+  });
+
   try {
     const shopeeResp = await fetch('https://affiliate.shopee.vn/api/v3/gql?q=batchCustomLink', {
       method: 'POST',
       headers: {
-        'Content-Type':          'application/json; charset=UTF-8',
-        'Cookie':                cookie,
-        'Csrf-Token':            csrfToken,
-        'Af-Ac-Enc-Sz-Token':   afEncToken,
-        'Af-Ac-Enc-Dat':        afEncDat,
+        'Content-Type':           'application/json; charset=UTF-8',
+        'Cookie':                 cookie,
+        'Csrf-Token':             csrfToken,
+        'Af-Ac-Enc-Sz-Token':    afEncToken,
+        'Af-Ac-Enc-Dat':         afEncDat,
         'Affiliate-Program-Type': '1',
-        'Origin':   'https://affiliate.shopee.vn',
-        'Referer':  'https://affiliate.shopee.vn/',
+        'Origin':  'https://affiliate.shopee.vn',
+        'Referer': 'https://affiliate.shopee.vn/',
       },
-      body: JSON.stringify(req.body),
+      body: rawBody,
     });
 
-    const json = await shopeeResp.json();
-    res.status(shopeeResp.status).json(json);
+    const text = await shopeeResp.text();
+
+    // Trả về response gốc từ Shopee kèm status code thật để dễ debug
+    res.status(shopeeResp.status)
+       .setHeader('Content-Type', 'application/json')
+       .end(text);
 
   } catch (e) {
     res.status(500).json({ error: e.message });
