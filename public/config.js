@@ -21,6 +21,12 @@ const CONFIG = {
   // Giá trị ở dòng "csrf-token:" trong Request Headers
   csrf_token: "4zKNjTKm-IJzP6sUk0XtcO-ukPJFVCuIQ8fE",
 
+  // Giá trị ở dòng "af-ac-enc-sz-token:" trong Request Headers
+  af_enc_sz_token: "4/pvxwI5ZQBl7f2qrtz+KQ==|tWiw9nbZASqNonG0nWo9X1cK/Met2+46EHHSMsM+njBylgy0Ljsl5xmrIIl1jb3omxWZGy8qas/CQSU=|Zu+3I7vImmiwZ+Sj|08|3",
+
+  // Giá trị ở dòng "af-ac-enc-dat:" trong Request Headers
+  af_enc_dat: "c5abd9c32e410952",
+
   // ── Tùy chọn ──────────────────────────────────────────────
 
   // Loại link đầu ra:
