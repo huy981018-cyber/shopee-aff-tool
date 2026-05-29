@@ -27,13 +27,8 @@ export default async function handler(req, res) {
   const afEncToken = req.headers['x-af-enc-token'] || '';
   const afEncDat   = req.headers['x-af-enc-dat']   || '';
 
-  // Đọc raw body vì Vercel không tự parse JSON cho serverless functions
-  const rawBody = await new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', chunk => data += chunk);
-    req.on('end',  () => resolve(data));
-    req.on('error', reject);
-  });
+  // Vercel tự parse JSON body thành object — stringify lại để forward sang Shopee
+  const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
 
   try {
     const shopeeResp = await fetch('https://affiliate.shopee.vn/api/v3/gql?q=batchCustomLink', {
@@ -48,12 +43,13 @@ export default async function handler(req, res) {
         'Origin':  'https://affiliate.shopee.vn',
         'Referer': 'https://affiliate.shopee.vn/',
       },
-      body: rawBody,
+      body,
     });
 
     const text = await shopeeResp.text();
+    console.log('Shopee response status:', shopeeResp.status);
+    console.log('Shopee response body:', text);
 
-    // Trả về response gốc từ Shopee kèm status code thật để dễ debug
     res.status(shopeeResp.status)
        .setHeader('Content-Type', 'application/json')
        .end(text);
