@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shopee Aff Link Converter</title>
+  <script src="config.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5; min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 24px 16px;
+    }
+    h1       { font-size: 22px; font-weight: 700; color: #ee4d2d; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 20px; }
+
+    .banner {
+      width: 100%; max-width: 680px; padding: 10px 16px;
+      border-radius: 8px; font-size: 13px; margin-bottom: 14px;
+    }
+    .banner-ok   { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+    .banner-err  { background: #fce4ec; color: #b71c1c; border: 1px solid #ef9a9a; }
+    .banner-warn { background: #fff8e1; color: #e65100; border: 1px solid #ffe082; }
+
+    .card {
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 24px; width: 100%; max-width: 680px; margin-bottom: 14px;
+    }
+    .section-title { font-size: 15px; font-weight: 700; color: #333; margin-bottom: 14px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 6px; }
+    textarea {
+      width: 100%; border: 1px solid #ddd; border-radius: 8px;
+      padding: 10px 12px; font-size: 14px; color: #222;
+      resize: vertical; outline: none; transition: border-color 0.2s;
+    }
+    textarea:focus { border-color: #ee4d2d; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 20px; border: none; border-radius: 8px;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn:hover    { opacity: 0.85; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary   { background: #ee4d2d; color: #fff; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .btn-copy      { background: #4caf50; color: #fff; font-size: 12px; padding: 6px 12px; }
+    .btn-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+
+    .result-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+    .result-table th {
+      background: #fef2ef; color: #ee4d2d; padding: 8px 12px;
+      text-align: left; font-weight: 600; border-bottom: 2px solid #ee4d2d22;
+    }
+    .result-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+    .result-table tr:last-child td { border-bottom: none; }
+    .result-table tr:hover td { background: #fafafa; }
+    .link-cell { word-break: break-all; font-family: monospace; font-size: 12px; color: #1a73e8; }
+    .orig-cell { word-break: break-all; font-size: 12px; color: #666; }
+
+    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .badge-ok   { background: #e8f5e9; color: #2e7d32; }
+    .badge-err  { background: #fce4ec; color: #b71c1c; }
+    .badge-warn { background: #fff8e1; color: #f57f17; }
+    .badge-wait { background: #e3f2fd; color: #1565c0; }
+
+    .summary-box { border-radius: 8px; padding: 12px 16px; font-size: 13px; margin-bottom: 14px; line-height: 1.6; }
+    .summary-ok   { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+    .summary-warn { background: #fff8e1; color: #e65100; border: 1px solid #ffe082; }
+
+    .progress-bar-wrap { width: 100%; height: 4px; background: #f0f0f0; border-radius: 2px; margin-top: 12px; overflow: hidden; display: none; }
+    .progress-bar { height: 100%; background: #ee4d2d; width: 0%; transition: width 0.3s ease; border-radius: 2px; }
+
+    .detail-title { font-size: 13px; font-weight: 600; color: #666; margin-top: 20px; margin-bottom: 4px; }
+    #converted-text { background: #f9f9f9; font-size: 13px; color: #222; }
+    #output-section { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Shopee Aff Link Converter</h1>
+  <p class="subtitle">Tự động chuyển link Shopee → link affiliate</p>
+
+  <!-- Banner trạng thái server -->
+  <div id="banner" class="banner banner-err">
+    ⚠️ Server chưa bật — yêu cầu bật server trên điện thoại
+  </div>
+
+  <!-- Input -->
+  <div class="card">
+    <div class="section-title">Chuyển đổi link trong đoạn văn bản</div>
+    <label for="input-text">Dán đoạn giới thiệu sản phẩm — tool tự nhận diện và thay thế tất cả link Shopee</label>
+    <textarea id="input-text" rows="8" placeholder="Ví dụ:&#10;&#10;Sản phẩm hot sale 50%! Mua ngay tại https://s.shopee.vn/xxxxx nhé!"></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-convert" onclick="convertText()" disabled>Chuyển đổi</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Xóa</button>
+    </div>
+    <div class="progress-bar-wrap" id="progress-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+  </div>
+
+  <!-- Output -->
+  <div class="card" id="output-section">
+    <div class="section-title">Kết quả (<span id="result-count">0</span> link)</div>
+    <div id="summary-box" class="summary-box" style="display:none;"></div>
+    <label for="converted-text">Nội dung sau khi thay link aff</label>
+    <textarea id="converted-text" rows="8" readonly></textarea>
+    <div class="btn-row">
+      <button class="btn btn-copy" onclick="copyOutput(this)">Sao chép nội dung</button>
+      <button class="btn btn-secondary" onclick="exportCsv()">Export CSV</button>
+    </div>
+    <div class="detail-title">Chi tiết từng link (<span id="detail-count">0</span>)</div>
+    <table class="result-table">
+      <thead>
+        <tr><th>#</th><th>Link gốc</th><th>Link aff</th><th>Trạng thái</th><th></th></tr>
+      </thead>
+      <tbody id="result-tbody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    // ============================================================
+    //  KIỂM TRA SERVER
+    // ============================================================
+
+    // Kiểm tra server trên điện thoại có đang chạy không
+    async function checkServer() {
+      const banner = document.getElementById('banner');
+      const btn    = document.getElementById('btn-convert');
+
+      if (!CONFIG.server_url || CONFIG.server_url.trim() === '') {
+        banner.className   = 'banner banner-err';
+        banner.textContent = '⚠️ Chưa cấu hình server_url trong config.js';
+        btn.disabled = true;
+        return;
+      }
+
+      try {
+        const resp = await fetch(CONFIG.server_url + '/ping', {
+          signal: AbortSignal.timeout(5000)
+        });
+        const json = await resp.json();
+        if (json.ok) {
+          banner.className   = 'banner banner-ok';
+          banner.textContent = '✓ Server đang chạy — Sẵn sàng chuyển đổi';
+          btn.disabled = false;
+        }
+      } catch {
+        banner.className   = 'banner banner-err';
+        banner.textContent = '⚠️ Không kết nối được server — Yêu cầu bật server trên điện thoại (gõ: shopee)';
+        btn.disabled = true;
+      }
+    }
+
+    // ============================================================
+    //  XỬ LÝ URL SHOPEE
+    // ============================================================
+
+    function getShopeeUrlRegex() {
+      return /https?:\/\/(?:s\.shopee\.vn|shp\.ee|(?:www\.)?shopee\.[a-z]+(?:\.[a-z]+)?)[^\s]*/g;
+    }
+
+    function trimTrailing(url) { return url.replace(/[.,;!?)'"\]>]+$/, ''); }
+
+    function extractUrls(text) {
+      const re = getShopeeUrlRegex(), seen = new Set(), urls = [];
+      let match;
+      while ((match = re.exec(text)) !== null) {
+        const url = trimTrailing(match[0]);
+        if (!seen.has(url)) { seen.add(url); urls.push(url); }
+      }
+      return urls;
+    }
+
+    function buildConvertedText(originalText, linkMap) {
+      return originalText.replace(getShopeeUrlRegex(), (match) => {
+        const trailing = match.slice(trimTrailing(match).length);
+        const url      = trimTrailing(match);
+        return (url in linkMap && linkMap[url] != null) ? linkMap[url] + trailing : match;
+      });
+    }
+
+    function parseShopeeUrl(url) {
+      try {
+        const u = new URL(url.trim()), host = u.hostname.replace('www.', '');
+        if (host === 's.shopee.vn' || host === 'shp.ee') return { type: 'short', url };
+        if (!host.includes('shopee.')) return { type: 'error', msg: 'Không phải link Shopee' };
+        const byPath = u.pathname.match(/\/product\/(\d+)\/(\d+)/);
+        if (byPath) return { type: 'ok', shopId: byPath[1], itemId: byPath[2] };
+        const bySlug = u.pathname.match(/-i\.(\d+)\.(\d+)(?:$|[?#])/);
+        if (bySlug) return { type: 'ok', shopId: bySlug[1], itemId: bySlug[2] };
+        const shopId = u.searchParams.get('shopid') || u.searchParams.get('shopId');
+        const itemId = u.searchParams.get('itemid') || u.searchParams.get('itemId');
+        if (shopId && itemId) return { type: 'ok', shopId, itemId };
+        return { type: 'error', msg: 'Không tìm thấy ID sản phẩm' };
+      } catch { return { type: 'error', msg: 'URL không hợp lệ' }; }
+    }
+
+    // Resolve short link qua allorigins (chỉ follow redirect)
+    async function resolveShortLink(shortUrl) {
+      const resp = await fetch(
+        `https://api.allorigins.win/get?url=${encodeURIComponent(shortUrl)}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+      if (!resp.ok) throw new Error('Không resolve được short link');
+      const data = await resp.json();
+      if (data?.status?.url) return data.status.url;
+      const html = data?.contents || '';
+      const canonical =
+        html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1] ||
+        html.match(/property=["']og:url["'][^>]+content=["']([^"']+)["']/i)?.[1];
+      if (canonical) return canonical;
+      throw new Error('Không đọc được URL từ short link');
+    }
+
+    // Gọi server trên điện thoại để tạo link aff
+    async function generateAffLink(productUrl) {
+      const resp = await fetch(CONFIG.server_url + '/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: productUrl }),
+        signal: AbortSignal.timeout(CONFIG.request_timeout_ms || 15000),
+      });
+
+      const json = await resp.json();
+      if (json.error) throw new Error(json.error);
+      if (!json.affLink) throw new Error('Không nhận được link');
+      return json.affLink;
+    }
+
+    // Pipeline: URL thô → link aff
+    async function processUrl(rawUrl) {
+      let url = rawUrl.trim();
+      let parsed = parseShopeeUrl(url);
+      if (parsed.type === 'short') {
+        const resolved = await resolveShortLink(url);
+        parsed = parseShopeeUrl(resolved);
+        if (parsed.type === 'short') throw new Error('Short link lồng nhau');
+      }
+      if (parsed.type === 'error') throw new Error(parsed.msg);
+      const cleanUrl = `https://shopee.vn/product/${parsed.shopId}/${parsed.itemId}`;
+      return await generateAffLink(cleanUrl);
+    }
+
+    // ============================================================
+    //  GIAO DIỆN
+    // ============================================================
+
+    let bulkResults = [];
+
+    async function convertText() {
+      const inputText = document.getElementById('input-text').value;
+      if (!inputText.trim()) return;
+
+      const urls = extractUrls(inputText);
+      if (!urls.length) { alert('Không tìm thấy link Shopee nào.'); return; }
+
+      const tbody      = document.getElementById('result-tbody');
+      const outputSec  = document.getElementById('output-section');
+      const pWrap      = document.getElementById('progress-wrap');
+      const pBar       = document.getElementById('progress-bar');
+      const countSpan  = document.getElementById('result-count');
+      const detailSpan = document.getElementById('detail-count');
+      const btn        = document.getElementById('btn-convert');
+      const summaryBox = document.getElementById('summary-box');
+
+      tbody.innerHTML      = '';
+      bulkResults          = [];
+      outputSec.style.display  = 'block';
+      pWrap.style.display      = 'block';
+      pBar.style.width         = '0%';
+      summaryBox.style.display = 'none';
+      countSpan.textContent    = urls.length;
+      detailSpan.textContent   = urls.length;
+      btn.disabled    = true;
+      btn.textContent = 'Đang xử lý...';
+
+      const linkMap = {};
+      const concurrency = CONFIG.bulk_concurrency || 2;
+      const delay       = CONFIG.bulk_delay_ms    || 600;
+
+      const rows = urls.map((url, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i+1}</td>
+          <td class="orig-cell">${truncate(url, 45)}</td>
+          <td>—</td>
+          <td><span class="status-badge badge-wait">Đợi...</span></td>
+          <td></td>`;
+        tbody.appendChild(tr);
+        return tr;
+      });
+
+      let done = 0;
+
+      async function processOne(i) {
+        const url   = urls[i];
+        const cells = rows[i].querySelectorAll('td');
+        cells[3].innerHTML = '<span class="status-badge badge-wait">Đang xử lý...</span>';
+        try {
+          const affLink   = await processUrl(url);
+          const unchanged = affLink === url;
+          linkMap[url]    = affLink;
+          bulkResults[i]  = { original: url, affLink, ok: true, unchanged };
+          cells[2].innerHTML = `<span class="link-cell">${affLink}</span>`;
+          cells[3].innerHTML = unchanged
+            ? '<span class="status-badge badge-warn">Không đổi</span>'
+            : '<span class="status-badge badge-ok">OK</span>';
+          cells[4].innerHTML = `<button class="btn btn-copy" onclick="copyText('${affLink}',this)">Copy</button>`;
+        } catch (e) {
+          linkMap[url]   = null;
+          bulkResults[i] = { original: url, affLink: null, error: e.message, ok: false };
+          cells[2].innerHTML = `<span style="color:#e53935;font-size:12px;">${e.message}</span>`;
+          cells[3].innerHTML = '<span class="status-badge badge-err">Lỗi</span>';
+        }
+        done++;
+        pBar.style.width = (done / urls.length * 100) + '%';
+        document.getElementById('converted-text').value = buildConvertedText(inputText, linkMap);
+      }
+
+      for (let i = 0; i < urls.length; i += concurrency) {
+        const batch = urls.slice(i, i + concurrency).map((_, j) => processOne(i + j));
+        await Promise.all(batch);
+        if (i + concurrency < urls.length) await sleep(delay);
+      }
+
+      pWrap.style.display = 'none';
+      btn.disabled        = false;
+      btn.textContent     = 'Chuyển đổi';
+      showSummary();
+    }
+
+    function showSummary() {
+      const box       = document.getElementById('summary-box');
+      const errors    = bulkResults.filter(r => r && !r.ok);
+      const unchanged = bulkResults.filter(r => r && r.ok && r.unchanged);
+      if (!errors.length && !unchanged.length) {
+        box.className   = 'summary-box summary-ok';
+        box.textContent = `✓ Tất cả ${bulkResults.filter(r=>r?.ok).length} link đã chuyển đổi thành công.`;
+      } else {
+        const lines = ['⚠️ Có vấn đề:'];
+        if (errors.length)    lines.push(`• ${errors.length} link lỗi`);
+        if (unchanged.length) lines.push(`• ${unchanged.length} link không đổi`);
+        box.className = 'summary-box summary-warn';
+        box.innerHTML = lines.join('<br>');
+      }
+      box.style.display = 'block';
+    }
+
+    function clearAll() {
+      document.getElementById('input-text').value          = '';
+      document.getElementById('converted-text').value      = '';
+      document.getElementById('result-tbody').innerHTML    = '';
+      document.getElementById('summary-box').style.display = 'none';
+      document.getElementById('output-section').style.display = 'none';
+      bulkResults = [];
+    }
+
+    function copyOutput(btn) {
+      const text = document.getElementById('converted-text').value;
+      if (!text) return alert('Chưa có nội dung.');
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Đã sao chép!';
+        setTimeout(() => btn.textContent = orig, 1500);
+      });
+    }
+
+    function exportCsv() {
+      if (!bulkResults.length) return;
+      const rows = [['#','Link gốc','Link aff','Trạng thái']];
+      bulkResults.forEach((r,i) => {
+        if (r) rows.push([i+1, r.original, r.affLink||'', r.ok ? 'OK' : r.error]);
+      });
+      const csv  = rows.map(r => r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8' });
+      const a    = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = 'shopee-aff-links.csv';
+      a.click();
+    }
+
+    function copyText(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Đã sao chép!';
+        setTimeout(() => btn.textContent = orig, 1500);
+      });
+    }
+
+    function truncate(str, n) { return str.length > n ? str.slice(0, n) + '…' : str; }
+    function sleep(ms)        { return new Promise(r => setTimeout(r, ms)); }
+
+    // Kiểm tra server ngay khi tải trang
+    checkServer();
+  </script>
+</body>
+</html>
