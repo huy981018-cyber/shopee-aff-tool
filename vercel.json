@@ -1,3 +1,8 @@
 {
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "functions": {
+    "api/proxy.js": {
+      "regions": ["sin1"]
+    }
+  }
 }
