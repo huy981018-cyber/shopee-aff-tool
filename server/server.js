@@ -17,35 +17,53 @@ let session = {
   expiresAt: 0,
 };
 
-// Đăng nhập Shopee Affiliate, lấy cookie và csrf-token
+// Đăng nhập Shopee, lấy cookie dùng cho Affiliate API
 async function login() {
-  console.log('Đang đăng nhập Shopee Affiliate...');
+  console.log('Đang đăng nhập Shopee...');
 
-  const resp = await fetch('https://affiliate.shopee.vn/api/v1/login/', {
-    method: 'POST',
+  // Bước 1: Lấy csrf token từ trang login
+  const initResp = await fetch('https://shopee.vn/buyer/login', {
     headers: {
-      'Content-Type': 'application/json',
-      'User-Agent':   'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
-      'Origin':       'https://affiliate.shopee.vn',
-      'Referer':      'https://affiliate.shopee.vn/login',
-    },
-    body: JSON.stringify({
-      username: process.env.SHOPEE_USER,
-      password: process.env.SHOPEE_PASS,
-    }),
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
+    }
   });
-
-  // Lấy cookie từ response headers
-  const setCookies = resp.headers.raw()['set-cookie'] || [];
-  const cookieStr  = setCookies.map(c => c.split(';')[0]).join('; ');
-  const csrfToken  = setCookies
+  const initCookies = (initResp.headers.raw()['set-cookie'] || [])
+    .map(c => c.split(';')[0]).join('; ');
+  const csrfInit = (initResp.headers.raw()['set-cookie'] || [])
     .map(c => c.split(';')[0])
     .find(c => c.startsWith('csrftoken='))
     ?.replace('csrftoken=', '') || '';
 
+  // Bước 2: Đăng nhập
+  const resp = await fetch('https://shopee.vn/api/v2/user/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent':   'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
+      'Referer':      'https://shopee.vn/buyer/login',
+      'X-CSRFToken':  csrfInit,
+      'Cookie':       initCookies,
+    },
+    body: JSON.stringify({
+      username:    process.env.SHOPEE_USER,
+      password:    process.env.SHOPEE_PASS,
+      client_id:   4,
+      support_whatsapp: false,
+    }),
+  });
+
+  // Lấy cookie từ response
+  const setCookies = (resp.headers.raw()['set-cookie'] || []);
+  const cookieStr  = setCookies.map(c => c.split(';')[0]).join('; ') + '; ' + initCookies;
+  const csrfToken  = setCookies
+    .map(c => c.split(';')[0])
+    .find(c => c.startsWith('csrftoken='))
+    ?.replace('csrftoken=', '') || csrfInit;
+
   const json = await resp.json();
-  if (json.code !== 0 && json.code !== undefined) {
-    throw new Error('Đăng nhập thất bại: ' + (json.message || json.code));
+  console.log('Login response code:', json.code);
+  if (json.code !== 0) {
+    throw new Error('Đăng nhập thất bại code: ' + json.code + ' - ' + (json.message || ''));
   }
 
   session = {
