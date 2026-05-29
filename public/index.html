@@ -261,9 +261,11 @@
       const resp = await fetch('/api/proxy', {
         method: 'POST',
         headers: {
-          'Content-Type':  'application/json',
-          'X-Cookie':      CONFIG.cookie,
-          'X-Csrf-Token':  CONFIG.csrf_token,
+          'Content-Type':    'application/json',
+          'X-Cookie':        CONFIG.cookie,
+          'X-Csrf-Token':    CONFIG.csrf_token,
+          'X-Af-Enc-Token':  CONFIG.af_enc_sz_token,
+          'X-Af-Enc-Dat':    CONFIG.af_enc_dat,
         },
         body,
         signal: AbortSignal.timeout(CONFIG.request_timeout_ms || 10000),
