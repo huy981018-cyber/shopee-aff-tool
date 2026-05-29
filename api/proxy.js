@@ -22,10 +22,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST')   return res.status(405).end('Method not allowed');
 
   // Nhận credentials từ tool (đặt tên X- vì browser chặn gửi Cookie trực tiếp)
-  const cookie     = req.headers['x-cookie']       || '';
-  const csrfToken  = req.headers['x-csrf-token']   || '';
-  const afEncToken = req.headers['x-af-enc-token'] || '';
-  const afEncDat   = req.headers['x-af-enc-dat']   || '';
+  const cookie    = req.headers['x-cookie']     || '';
+  const csrfToken = req.headers['x-csrf-token'] || '';
 
   // Vercel tự parse JSON body thành object — stringify lại để forward sang Shopee
   const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
@@ -37,8 +35,6 @@ export default async function handler(req, res) {
         'Content-Type':           'application/json; charset=UTF-8',
         'Cookie':                 cookie,
         'Csrf-Token':             csrfToken,
-        'Af-Ac-Enc-Sz-Token':    afEncToken,
-        'Af-Ac-Enc-Dat':         afEncDat,
         'Affiliate-Program-Type': '1',
         'Origin':  'https://affiliate.shopee.vn',
         'Referer': 'https://affiliate.shopee.vn/',
