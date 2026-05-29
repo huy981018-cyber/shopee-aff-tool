@@ -271,13 +271,17 @@
         signal: AbortSignal.timeout(CONFIG.request_timeout_ms || 10000),
       });
 
-      if (!resp.ok) throw new Error('Lỗi server: ' + resp.status);
+      if (!resp.ok) throw new Error('Lỗi server: HTTP ' + resp.status);
 
       let json;
       try { json = await resp.json(); } catch { throw new Error('Phản hồi không hợp lệ từ server'); }
 
+      // Shopee trả về lỗi xác thực dạng { code, message } hoặc { error }
+      if (json?.code && json.code !== 0) throw new Error('Shopee lỗi ' + json.code + ': ' + (json.message || 'xác thực thất bại — cập nhật cookie/token trong config.js'));
+      if (json?.error) throw new Error('Shopee lỗi: ' + json.error);
+
       const item = json?.data?.batchCustomLink?.[0];
-      if (!item) throw new Error('Cookie/token hết hạn — cập nhật lại config.js');
+      if (!item) throw new Error('Không nhận được link từ Shopee — có thể cookie/token hết hạn, kiểm tra lại config.js');
       if (item.failCode !== 0) throw new Error('Shopee báo lỗi: failCode ' + item.failCode);
 
       return CONFIG.link_type === 'short' ? item.shortLink : item.longLink;
