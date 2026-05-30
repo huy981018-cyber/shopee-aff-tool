@@ -18,6 +18,10 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/api/ping':
             self._json(200, {'ok': True})
+        elif 'apple-touch-icon' in self.path or 'favicon' in self.path:
+            self.send_response(204)
+            self._cors()
+            self.end_headers()
         elif self.path.startswith('/api/jobs'):
             # Long-poll: giữ connection tối đa 25s cho đến khi có job
             deadline = time.time() + 25
