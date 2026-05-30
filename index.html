@@ -96,6 +96,7 @@
     <div class="btn-row">
       <button class="btn btn-primary" id="btn-convert" onclick="convertText()" disabled>Chuyển đổi</button>
       <button class="btn btn-secondary" onclick="clearAll()">Xóa</button>
+      <button class="btn btn-secondary" onclick="testPing()">Test PING</button>
     </div>
     <div class="progress-bar-wrap" id="progress-wrap">
       <div class="progress-bar" id="progress-bar"></div>
@@ -155,19 +156,40 @@
 
     // Gửi message tới Chrome Extension
     function sendToExtension(message) {
+      console.log('[page] sendToExtension', message);
       return new Promise((resolve, reject) => {
         if (!chrome?.runtime?.sendMessage) {
+          console.error('[page] sendToExtension no chrome.runtime.sendMessage');
           reject(new Error('Chrome Extension API không khả dụng'));
           return;
         }
         chrome.runtime.sendMessage(CONFIG.extension_id, message, (response) => {
           if (chrome.runtime.lastError) {
+            console.error('[page] sendToExtension lastError', chrome.runtime.lastError.message);
             reject(new Error(chrome.runtime.lastError.message));
           } else {
+            console.log('[page] sendToExtension response', response);
             resolve(response);
           }
         });
       });
+    }
+
+    async function testPing() {
+      const banner = document.getElementById('banner');
+      try {
+        const result = await sendToExtension({ type: 'PING' });
+        if (result?.ok) {
+          banner.className = 'banner banner-ok';
+          banner.textContent = '✓ PING thành công — Extension đang phản hồi';
+        } else {
+          banner.className = 'banner banner-err';
+          banner.textContent = '⚠️ PING thất bại — Extension không trả về ok';
+        }
+      } catch (err) {
+        banner.className = 'banner banner-err';
+        banner.textContent = '⚠️ PING lỗi: ' + err.message;
+      }
     }
 
     // ============================================================
@@ -214,40 +236,10 @@
       } catch { return { type: 'error', msg: 'URL không hợp lệ' }; }
     }
 
-    // Resolve short link qua allorigins (chỉ follow redirect)
-    async function resolveShortLink(shortUrl) {
-      const timeoutMs = 20000;
-      const endpoints = [
-        `https://api.allorigins.win/get?url=${encodeURIComponent(shortUrl)}`,
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(shortUrl)}`,
-      ];
-
-      for (const endpoint of endpoints) {
-        const resp = await fetch(endpoint, { signal: AbortSignal.timeout(timeoutMs) });
-        if (!resp.ok) continue;
-
-        if (endpoint.includes('/get?')) {
-          const data = await resp.json();
-          if (data?.status?.url) return data.status.url;
-          const html = data?.contents || '';
-          const canonical =
-            html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1] ||
-            html.match(/property=["']og:url["'][^>]+content=["']([^"']+)["']/i)?.[1];
-          if (canonical) return canonical;
-        } else {
-          const html = await resp.text();
-          const canonical =
-            html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1] ||
-            html.match(/property=["']og:url["'][^>]+content=["']([^"']+)["']/i)?.[1];
-          if (canonical) return canonical;
-        }
-      }
-
-      throw new Error('Không đọc được URL từ short link hoặc quá thời gian chờ');
-    }
 
     // Gọi Chrome Extension để tạo link aff
     async function generateAffLink(productUrl) {
+      console.log('[page] generateAffLink', productUrl);
       const result = await sendToExtension({
         type: 'CONVERT_LINKS',
         urls: [productUrl],
@@ -265,14 +257,8 @@
     async function processUrl(rawUrl) {
       let url = rawUrl.trim();
       let parsed = parseShopeeUrl(url);
-      if (parsed.type === 'short') {
-        const resolved = await resolveShortLink(url);
-        parsed = parseShopeeUrl(resolved);
-        if (parsed.type === 'short') throw new Error('Short link lồng nhau');
-      }
-      if (parsed.type === 'error') throw new Error(parsed.msg);
-      const cleanUrl = `https://shopee.vn/product/${parsed.shopId}/${parsed.itemId}`;
-      return await generateAffLink(cleanUrl);
+        if (parsed.type === 'error') throw new Error(parsed.msg);
+      return await generateAffLink(url);
     }
 
     // ============================================================
@@ -282,10 +268,15 @@
     let bulkResults = [];
 
     async function convertText() {
+      console.log('[page] convertText called');
       const inputText = document.getElementById('input-text').value;
-      if (!inputText.trim()) return;
+      if (!inputText.trim()) {
+        console.log('[page] convertText no input');
+        return;
+      }
 
       const urls = extractUrls(inputText);
+      console.log('[page] convertText urls', urls);
       if (!urls.length) { alert('Không tìm thấy link Shopee nào.'); return; }
 
       const tbody      = document.getElementById('result-tbody');

@@ -6,16 +6,22 @@
 
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
 
   "host_permissions": [
-    "https://affiliate.shopee.vn/*"
+    "https://affiliate.shopee.vn/*",
+    "https://s.shopee.vn/*",
+    "https://shopee.vn/*",
+    "https://shp.ee/*"
   ],
 
   "externally_connectable": {
     "matches": [
-      "https://huy981018-cyber.github.io/*"
+      "https://huy981018-cyber.github.io/*",
+      "http://localhost:8080/*",
+      "http://127.0.0.1:8080/*"
     ]
   },
 
