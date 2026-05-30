@@ -157,3 +157,19 @@ async function processRelayJob(jobId, urls) {
 }
 
 relayLoop();
+
+// Heartbeat mỗi 5s để relay biết extension còn sống
+async function heartbeatLoop() {
+  while (true) {
+    try {
+      const tabs = await chrome.tabs.query({ url: 'https://affiliate.shopee.vn/*' });
+      const affiliateTab = tabs.length > 0;
+      await fetch(`${RELAY}/api/heartbeat`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ affiliate_tab: affiliateTab }),
+      });
+    } catch {}
+    await sleep(5000);
+  }
+}
+heartbeatLoop();

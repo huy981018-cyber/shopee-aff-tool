@@ -87,6 +87,17 @@
     ⚠️ Server chưa bật — yêu cầu bật server trên điện thoại
   </div>
 
+  <!-- Health status -->
+  <div class="card" style="padding:14px 24px;">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <span id="hs-server" style="font-size:13px;">⬜ Server</span>
+      <span id="hs-ext"    style="font-size:13px;">⬜ Extension</span>
+      <span id="hs-ngrok"  style="font-size:13px;">⬜ Ngrok</span>
+      <span id="hs-aff"    style="font-size:13px;">⬜ Affiliate</span>
+      <button class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:6px 14px;" onclick="resetAll()">Reset</button>
+    </div>
+  </div>
+
   <!-- Input -->
   <div class="card">
     <div class="section-title">Chuyển đổi link trong đoạn văn bản</div>
@@ -127,6 +138,58 @@
     // ============================================================
 
     const RELAY_BASE = location.origin;
+
+    function setHealth(id, ok, label) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = (ok === true ? '🟢' : ok === false ? '🔴' : '⬜') + ' ' + label;
+    }
+
+    async function healthLoop() {
+      while (true) {
+        // Server + Extension
+        try {
+          const r = await fetch(`${RELAY_BASE}/api/health`);
+          const h = await r.json();
+          setHealth('hs-server', h.server, 'Server');
+          setHealth('hs-ext',    h.extension, 'Extension');
+        } catch {
+          setHealth('hs-server', false, 'Server');
+          setHealth('hs-ext',    false, 'Extension');
+        }
+
+        // Ngrok — kiểm tra bằng cách fetch chính trang này
+        try {
+          const r = await fetch(location.origin + '/api/ping', { cache: 'no-store' });
+          setHealth('hs-ngrok', r.ok, 'Ngrok');
+        } catch {
+          setHealth('hs-ngrok', false, 'Ngrok');
+        }
+
+        // Affiliate tab — extension báo qua health
+        try {
+          const r = await fetch(`${RELAY_BASE}/api/health`);
+          const h = await r.json();
+          setHealth('hs-aff', h.affiliate_tab ?? null, 'Affiliate');
+        } catch {
+          setHealth('hs-aff', null, 'Affiliate');
+        }
+
+        await sleep(5000);
+      }
+    }
+
+    async function resetAll() {
+      try {
+        await fetch(`${RELAY_BASE}/api/reset`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        document.getElementById('banner').textContent = '↺ Đã reset — đang kiểm tra lại...';
+      } catch {
+        alert('Không kết nối được server để reset');
+      }
+    }
 
     // Tự động chọn: extension (laptop) hoặc relay server (điện thoại)
     async function checkServer() {
@@ -388,6 +451,7 @@
 
     // Kiểm tra server ngay khi tải trang
     checkServer();
+    healthLoop();
   </script>
 </body>
 </html>

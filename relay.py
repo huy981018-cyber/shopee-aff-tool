@@ -8,10 +8,11 @@ result_events = {}
 lock = threading.Lock()
 new_job_event = threading.Event()
 counter = [0]
+last_heartbeat = [0.0]
+affiliate_tab_ok = [None]
 
 class Handler(SimpleHTTPRequestHandler):
     def send_head(self):
-        # Xóa If-Modified-Since để không trả 304 — tránh Safari dùng cache cũ
         if 'If-Modified-Since' in self.headers:
             del self.headers['If-Modified-Since']
         return super().send_head()
@@ -25,18 +26,27 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == '/api/ping':
             self._json(200, {'ok': True})
 
+        elif self.path == '/api/health':
+            ext_ok = time.time() - last_heartbeat[0] < 10
+            with lock:
+                pending = len(jobs)
+            self._json(200, {
+                'server': True,
+                'extension': ext_ok,
+                'affiliate_tab': affiliate_tab_ok[0],
+                'pending_jobs': pending,
+            })
+
         elif 'apple-touch-icon' in self.path or 'favicon' in self.path:
             self.send_response(204)
             self._cors()
             self.end_headers()
 
         elif self.path.startswith('/api/jobs'):
-            # Long-poll: block tối đa 25s cho đến khi có job
             deadline = time.time() + 25
             while True:
                 with lock:
                     snapshot = dict(jobs) if jobs else None
-                # Lock đã được release trước khi gọi _json
                 if snapshot:
                     self._json(200, snapshot)
                     return
@@ -54,7 +64,12 @@ class Handler(SimpleHTTPRequestHandler):
         length = int(self.headers.get('Content-Length', 0))
         body = json.loads(self.rfile.read(length))
 
-        if self.path == '/api/convert':
+        if self.path == '/api/heartbeat':
+            last_heartbeat[0] = time.time()
+            affiliate_tab_ok[0] = body.get('affiliate_tab')
+            self._json(200, {'ok': True})
+
+        elif self.path == '/api/convert':
             with lock:
                 counter[0] += 1
                 job_id = str(counter[0])
@@ -62,7 +77,6 @@ class Handler(SimpleHTTPRequestHandler):
                 ev = threading.Event()
                 result_events[job_id] = ev
             new_job_event.set()
-            # Block cho đến khi extension trả kết quả (tối đa 10s)
             ev.wait(timeout=10)
             with lock:
                 result = results.pop(job_id, None)
@@ -80,9 +94,17 @@ class Handler(SimpleHTTPRequestHandler):
                 ev.set()
             self._json(200, {'ok': True})
 
+        elif self.path == '/api/reset':
+            with lock:
+                for ev in result_events.values():
+                    ev.set()
+                jobs.clear()
+                results.clear()
+                result_events.clear()
+            self._json(200, {'ok': True})
+
     def send_response(self, code, message=None):
         super().send_response(code, message)
-        # Disable cache để tránh 304 từ Safari/iOS
         self.send_header('Cache-Control', 'no-store')
 
     def _cors(self):
@@ -109,7 +131,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def cleanup_loop():
     while True:
-        time.sleep(30)
+        time.sleep(5)
         now = time.time()
         with lock:
             stale = [jid for jid, j in jobs.items()
