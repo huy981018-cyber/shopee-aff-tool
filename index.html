@@ -196,14 +196,12 @@
     //  XỬ LÝ URL SHOPEE
     // ============================================================
 
-    function getShopeeUrlRegex() {
-      return /https?:\/\/(?:s\.shopee\.vn|shp\.ee|(?:www\.)?shopee\.[a-z]+(?:\.[a-z]+)?)[^\s]*/g;
-    }
+    const SHOPEE_URL_RE = /https?:\/\/(?:s\.shopee\.vn|shp\.ee|(?:www\.)?shopee\.[a-z]+(?:\.[a-z]+)?)[^\s]*/g;
 
     function trimTrailing(url) { return url.replace(/[.,;!?)'"\]>]+$/, ''); }
 
     function extractUrls(text) {
-      const re = getShopeeUrlRegex(), seen = new Set(), urls = [];
+      const re = new RegExp(SHOPEE_URL_RE.source, 'g'), seen = new Set(), urls = [];
       let match;
       while ((match = re.exec(text)) !== null) {
         const url = trimTrailing(match[0]);
@@ -213,52 +211,23 @@
     }
 
     function buildConvertedText(originalText, linkMap) {
-      return originalText.replace(getShopeeUrlRegex(), (match) => {
+      return originalText.replace(new RegExp(SHOPEE_URL_RE.source, 'g'), (match) => {
         const trailing = match.slice(trimTrailing(match).length);
         const url      = trimTrailing(match);
         return (url in linkMap && linkMap[url] != null) ? linkMap[url] + trailing : match;
       });
     }
 
-    function parseShopeeUrl(url) {
-      try {
-        const u = new URL(url.trim()), host = u.hostname.replace('www.', '');
-        if (host === 's.shopee.vn' || host === 'shp.ee') return { type: 'short', url };
-        if (!host.includes('shopee.')) return { type: 'error', msg: 'Không phải link Shopee' };
-        const byPath = u.pathname.match(/\/product\/(\d+)\/(\d+)/);
-        if (byPath) return { type: 'ok', shopId: byPath[1], itemId: byPath[2] };
-        const bySlug = u.pathname.match(/-i\.(\d+)\.(\d+)(?:$|[?#])/);
-        if (bySlug) return { type: 'ok', shopId: bySlug[1], itemId: bySlug[2] };
-        const shopId = u.searchParams.get('shopid') || u.searchParams.get('shopId');
-        const itemId = u.searchParams.get('itemid') || u.searchParams.get('itemId');
-        if (shopId && itemId) return { type: 'ok', shopId, itemId };
-        return { type: 'error', msg: 'Không tìm thấy ID sản phẩm' };
-      } catch { return { type: 'error', msg: 'URL không hợp lệ' }; }
-    }
 
-
-    // Gọi Chrome Extension để tạo link aff
-    async function generateAffLink(productUrl) {
-      console.log('[page] generateAffLink', productUrl);
-      const result = await sendToExtension({
-        type: 'CONVERT_LINKS',
-        urls: [productUrl],
-      });
-
+    // Gửi tất cả URLs cùng lúc cho extension, trả về map { url → affLink | Error }
+    async function generateAffLinks(urls) {
+      const result = await sendToExtension({ type: 'CONVERT_LINKS', urls });
       if (result?.error) throw new Error(result.error);
-      const linkResult = result?.results?.[productUrl];
-      if (!linkResult)           throw new Error('Không nhận được kết quả');
-      if (linkResult.error)      throw new Error(linkResult.error);
-      if (!linkResult.affLink)   throw new Error('Không nhận được link');
-      return linkResult.affLink;
-    }
-
-    // Pipeline: URL thô → link aff
-    async function processUrl(rawUrl) {
-      let url = rawUrl.trim();
-      let parsed = parseShopeeUrl(url);
-        if (parsed.type === 'error') throw new Error(parsed.msg);
-      return await generateAffLink(url);
+      return urls.reduce((map, url) => {
+        const r = result?.results?.[url];
+        map[url] = (!r || r.error) ? new Error(r?.error || 'Không nhận được kết quả') : r.affLink;
+        return map;
+      }, {});
     }
 
     // ============================================================
@@ -299,55 +268,42 @@
       btn.disabled    = true;
       btn.textContent = 'Đang xử lý...';
 
-      const linkMap = {};
-      const concurrency = CONFIG.bulk_concurrency || 2;
-      const delay       = CONFIG.bulk_delay_ms    || 600;
-
-      const rows = urls.map((url, i) => {
+      urls.forEach((url, i) => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${i+1}</td>
           <td class="orig-cell">${truncate(url, 45)}</td>
           <td>—</td>
-          <td><span class="status-badge badge-wait">Đợi...</span></td>
+          <td><span class="status-badge badge-wait">Đang xử lý...</span></td>
           <td></td>`;
         tbody.appendChild(tr);
-        return tr;
       });
 
-      let done = 0;
+      const resultMap = await generateAffLinks(urls);
+      const linkMap = {};
 
-      async function processOne(i) {
-        const url   = urls[i];
-        const cells = rows[i].querySelectorAll('td');
-        cells[3].innerHTML = '<span class="status-badge badge-wait">Đang xử lý...</span>';
-        try {
-          const affLink   = await processUrl(url);
-          const unchanged = affLink === url;
-          linkMap[url]    = affLink;
-          bulkResults[i]  = { original: url, affLink, ok: true, unchanged };
-          cells[2].innerHTML = `<span class="link-cell">${affLink}</span>`;
+      urls.forEach((url, i) => {
+        const cells = tbody.rows[i].querySelectorAll('td');
+        const val   = resultMap[url];
+        if (val instanceof Error) {
+          linkMap[url]   = null;
+          bulkResults[i] = { original: url, affLink: null, error: val.message, ok: false };
+          cells[2].innerHTML = `<span style="color:#e53935;font-size:12px;">${val.message}</span>`;
+          cells[3].innerHTML = '<span class="status-badge badge-err">Lỗi</span>';
+        } else {
+          const unchanged = val === url;
+          linkMap[url]    = val;
+          bulkResults[i]  = { original: url, affLink: val, ok: true, unchanged };
+          cells[2].innerHTML = `<span class="link-cell">${val}</span>`;
           cells[3].innerHTML = unchanged
             ? '<span class="status-badge badge-warn">Không đổi</span>'
             : '<span class="status-badge badge-ok">OK</span>';
-          cells[4].innerHTML = `<button class="btn btn-copy" onclick="copyText('${affLink}',this)">Copy</button>`;
-        } catch (e) {
-          linkMap[url]   = null;
-          bulkResults[i] = { original: url, affLink: null, error: e.message, ok: false };
-          cells[2].innerHTML = `<span style="color:#e53935;font-size:12px;">${e.message}</span>`;
-          cells[3].innerHTML = '<span class="status-badge badge-err">Lỗi</span>';
+          cells[4].innerHTML = `<button class="btn btn-copy" onclick="copyText('${val}',this)">Copy</button>`;
         }
-        done++;
-        pBar.style.width = (done / urls.length * 100) + '%';
-        document.getElementById('converted-text').value = buildConvertedText(inputText, linkMap);
-      }
+      });
 
-      for (let i = 0; i < urls.length; i += concurrency) {
-        const batch = urls.slice(i, i + concurrency).map((_, j) => processOne(i + j));
-        await Promise.all(batch);
-        if (i + concurrency < urls.length) await sleep(delay);
-      }
-
+      pBar.style.width = '100%';
+      document.getElementById('converted-text').value = buildConvertedText(inputText, linkMap);
       pWrap.style.display = 'none';
       btn.disabled        = false;
       btn.textContent     = 'Chuyển đổi';
@@ -380,14 +336,16 @@
       bulkResults = [];
     }
 
+    function flashBtn(btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Đã sao chép!';
+      setTimeout(() => btn.textContent = orig, 1500);
+    }
+
     function copyOutput(btn) {
       const text = document.getElementById('converted-text').value;
       if (!text) return alert('Chưa có nội dung.');
-      navigator.clipboard.writeText(text).then(() => {
-        const orig = btn.textContent;
-        btn.textContent = 'Đã sao chép!';
-        setTimeout(() => btn.textContent = orig, 1500);
-      });
+      navigator.clipboard.writeText(text).then(() => flashBtn(btn));
     }
 
     function exportCsv() {
@@ -405,11 +363,7 @@
     }
 
     function copyText(text, btn) {
-      navigator.clipboard.writeText(text).then(() => {
-        const orig = btn.textContent;
-        btn.textContent = 'Đã sao chép!';
-        setTimeout(() => btn.textContent = orig, 1500);
-      });
+      navigator.clipboard.writeText(text).then(() => flashBtn(btn));
     }
 
     function truncate(str, n) { return str.length > n ? str.slice(0, n) + '…' : str; }

@@ -113,14 +113,20 @@ async function resolveShortLink(shortUrl) {
   return resp.url;
 }
 
-function waitForTab(tabId) {
-  return new Promise(resolve => {
-    chrome.tabs.onUpdated.addListener(function listener(id, info) {
+function waitForTab(tabId, timeout = 30000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      reject(new Error('Tab không load xong sau ' + timeout / 1000 + 's'));
+    }, timeout);
+    function listener(id, info) {
       if (id === tabId && info.status === 'complete') {
         chrome.tabs.onUpdated.removeListener(listener);
-        setTimeout(resolve, 1000); // Đợi thêm 1s cho page load xong
+        clearTimeout(timer);
+        setTimeout(resolve, 1000);
       }
-    });
+    }
+    chrome.tabs.onUpdated.addListener(listener);
   });
 }
 
@@ -136,35 +142,29 @@ async function injectContentScript(tabId) {
   }
 }
 
-function sendMessageToTabWithRetry(tabId, message, retries = 2) {
-  return new Promise(async (resolve, reject) => {
-    let attempt = 0;
-    let lastError;
-
-    while (attempt <= retries) {
-      attempt += 1;
-      try {
-        const response = await new Promise((resolveMessage, rejectMessage) => {
-          chrome.tabs.sendMessage(tabId, message, (response) => {
-            if (chrome.runtime.lastError) {
-              rejectMessage(new Error(chrome.runtime.lastError.message));
-            } else {
-              resolveMessage(response);
-            }
-          });
+async function sendMessageToTabWithRetry(tabId, message, retries = 2) {
+  let lastError;
+  for (let attempt = 1; attempt <= retries + 1; attempt++) {
+    try {
+      return await new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(tabId, message, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
         });
-        return resolve(response);
-      } catch (err) {
-        lastError = err;
-        console.warn(`[background] sendMessage attempt ${attempt} failed`, err.message);
-        if (attempt > retries) break;
+      });
+    } catch (err) {
+      lastError = err;
+      console.warn(`[background] sendMessage attempt ${attempt} failed`, err.message);
+      if (attempt <= retries) {
         await sleep(500);
         await injectContentScript(tabId);
       }
     }
-
-    reject(lastError);
-  });
+  }
+  throw lastError;
 }
 
 function sleep(ms) {

@@ -89,12 +89,11 @@ async function fetchBatchCustomLink(url) {
   });
 
   console.log('[content] fetchBatchCustomLink response', { status: resp.status, statusText: resp.statusText });
-  const json = await resp.json();
-  console.log('[content] fetchBatchCustomLink body', json);
-
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
   }
+  const json = await resp.json();
+  console.log('[content] fetchBatchCustomLink body', json);
 
   if (json?.error || json?.is_login === false) {
     throw new Error('Chưa đăng nhập hoặc session hết hạn');
@@ -124,7 +123,7 @@ async function convertViaPageUi(url) {
   inputField.dispatchEvent(new Event('change', { bubbles: true }));
   button.click();
 
-  const result = await waitForAffiliateResult();
+  const result = await waitForAffiliateResult(url);
 
   inputField.value = previousValue;
   inputField.dispatchEvent(new Event('input', { bubbles: true }));
@@ -161,10 +160,10 @@ function findAffiliateSubmitButton() {
     || buttons.find(btn => /submit|convert|tạo|generate/i.test((btn.textContent || btn.value || '').trim()));
 }
 
-async function waitForAffiliateResult() {
+async function waitForAffiliateResult(originalUrl) {
   const start = Date.now();
   while (Date.now() - start < 25000) {
-    const result = findAffiliateResultLinkInDialog();
+    const result = findAffiliateResultLinkInDialog() || findShortLinkAnywhere(originalUrl);
     if (result) {
       console.log('[content] waitForAffiliateResult found', result);
       return result;
@@ -174,33 +173,21 @@ async function waitForAffiliateResult() {
   return null;
 }
 
-function findAffiliateResultLink() {
-  const patterns = [/https?:\/\/s\.shopee\.vn\/[A-Za-z0-9]+/, /https?:\/\/shopee\.vn\/[^\s"'<>]+/];
-  const elements = Array.from(document.querySelectorAll('textarea, input[type=text], input:not([type]), div, span, p, label'));
-
+function findShortLinkAnywhere(excludeUrl) {
+  const pattern = /https?:\/\/s\.shopee\.vn\/[A-Za-z0-9]+/;
+  const elements = Array.from(document.querySelectorAll('input, textarea, div, span, p, label, a'));
   for (const el of elements) {
     const text = (el.value || el.textContent || '').trim();
     if (!text) continue;
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
-      if (match) return match[0];
-    }
+    const match = text.match(pattern);
+    if (match && match[0] !== excludeUrl) return match[0];
   }
-
-  const dialog = document.querySelector('div[role="dialog"], .modal, .ant-modal');
-  if (dialog) {
-    const dialogText = dialog.textContent || '';
-    for (const pattern of patterns) {
-      const match = dialogText.match(pattern);
-      if (match) return match[0];
-    }
-  }
-
   return null;
 }
 
+
 function findAffiliateResultLinkInDialog() {
-  const patterns = [/https?:\/\/s\.shopee\.vn\/[A-Za-z0-9]+/, /https?:\/\/shopee\.vn\/[^\\s"'<>]+/];
+  const patterns = [/https?:\/\/s\.shopee\.vn\/[A-Za-z0-9]+/, /https?:\/\/shopee\.vn\/[^\s"'<>]+/];
   const dialog = document.querySelector('div[role="dialog"], .modal, .ant-modal, .shopee-modal, [class*="dialog"], [class*="modal"]');
   if (!dialog) return null;
 

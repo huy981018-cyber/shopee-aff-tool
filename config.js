@@ -12,10 +12,4 @@ const CONFIG = {
 
   // ID của Chrome Extension (lấy từ chrome://extensions sau khi cài)
   extension_id: "gmfngolmhfkcmjankdbpihmcpdhiimap",
-
-  // Số link xử lý đồng thời
-  bulk_concurrency: 2,
-
-  // Delay giữa các batch (ms)
-  bulk_delay_ms: 500,
 };
