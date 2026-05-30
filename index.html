@@ -185,10 +185,10 @@
 
     async function sendConvert(urls, ms) {
       if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage && CONFIG.extension_id) {
-        try {
-          return await withTimeout(sendToExtension({ type: 'CONVERT_LINKS', urls }), ms);
-        } catch {}
+        // Laptop: dùng extension trực tiếp, không fallback relay
+        return await withTimeout(sendToExtension({ type: 'CONVERT_LINKS', urls }), ms);
       }
+      // Điện thoại: dùng relay
       return await sendViaRelay(urls, ms);
     }
 

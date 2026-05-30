@@ -152,7 +152,7 @@ async function convertAllViaPageUi(urls) {
 
 async function waitForNewLinks(count, existingLinks) {
   const start = Date.now();
-  while (Date.now() - start < 30000) {
+  while (Date.now() - start < 8000) {
     const all = collectAllShortLinks().filter(l => !existingLinks.has(l));
     if (all.length >= count) return all.slice(0, count);
     await sleep(200);

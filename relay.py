@@ -10,6 +10,12 @@ new_job_event = threading.Event()
 counter = [0]
 
 class Handler(SimpleHTTPRequestHandler):
+    def send_head(self):
+        # Xóa If-Modified-Since để không trả 304 — tránh Safari dùng cache cũ
+        if 'If-Modified-Since' in self.headers:
+            del self.headers['If-Modified-Since']
+        return super().send_head()
+
     def do_OPTIONS(self):
         self.send_response(200)
         self._cors()
