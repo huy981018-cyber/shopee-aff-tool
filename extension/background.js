@@ -107,6 +107,7 @@ function sleep(ms) {
 // ============================================================
 
 const RELAY = 'http://localhost:8080';
+const activeJobs = new Set();
 
 async function pollRelay() {
   try {
@@ -114,12 +115,16 @@ async function pollRelay() {
     if (!resp.ok) return;
     const jobs = await resp.json();
     for (const [jobId, urls] of Object.entries(jobs)) {
-      processRelayJob(jobId, urls);
+      if (!activeJobs.has(jobId)) {
+        activeJobs.add(jobId);
+        processRelayJob(jobId, urls);
+      }
     }
   } catch {}
 }
 
 async function processRelayJob(jobId, urls) {
+  let payload;
   try {
     let tabs = await chrome.tabs.query({ url: 'https://affiliate.shopee.vn/*' });
     if (!tabs.length) {
@@ -134,18 +139,17 @@ async function processRelayJob(jobId, urls) {
     for (const url of urls) {
       results[url] = result?.results?.[url] ?? { error: 'Không nhận được kết quả' };
     }
-    await fetch(`${RELAY}/api/result/${jobId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ results }),
-    });
+    payload = { results };
   } catch (e) {
-    await fetch(`${RELAY}/api/result/${jobId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: e.message }),
-    }).catch(() => {});
+    payload = { error: e.message };
+  } finally {
+    activeJobs.delete(jobId);
   }
+  await fetch(`${RELAY}/api/result/${jobId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
 }
 
 setInterval(pollRelay, 2000);

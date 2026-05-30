@@ -164,43 +164,48 @@
     }
 
     // Gửi message — tự chọn extension hoặc relay
+    function withTimeout(promise, ms = 8000) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout sau ' + ms / 1000 + 's')), ms)),
+      ]);
+    }
+
     async function sendToExtension(message) {
       if (chrome?.runtime?.sendMessage && CONFIG.extension_id) {
-        return new Promise((resolve, reject) => {
+        return withTimeout(new Promise((resolve, reject) => {
           chrome.runtime.sendMessage(CONFIG.extension_id, message, (response) => {
             if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
             else resolve(response);
           });
-        });
+        }));
       }
       throw new Error('no extension');
     }
 
     async function sendConvert(urls) {
-      // Thử extension trực tiếp
       if (chrome?.runtime?.sendMessage && CONFIG.extension_id) {
         try {
           return await sendToExtension({ type: 'CONVERT_LINKS', urls });
         } catch {}
       }
-      // Fallback relay
       return await sendViaRelay(urls);
     }
 
     async function sendViaRelay(urls) {
-      const r = await fetch(`${RELAY_BASE}/api/convert`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls }),
-      });
-      const { job_id } = await r.json();
-      // Poll kết quả
-      for (let i = 0; i < 60; i++) {
-        await sleep(1000);
-        const res = await fetch(`${RELAY_BASE}/api/result/${job_id}`);
-        if (res.status === 200) return await res.json();
-      }
-      throw new Error('Relay timeout');
+      return withTimeout(async function() {
+        const r = await fetch(`${RELAY_BASE}/api/convert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls }),
+        });
+        const { job_id } = await r.json();
+        while (true) {
+          await sleep(1000);
+          const res = await fetch(`${RELAY_BASE}/api/result/${job_id}`);
+          if (res.status === 200) return await res.json();
+        }
+      }());
     }
 
 
