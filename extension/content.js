@@ -104,8 +104,9 @@ async function convertAllViaPageUi(urls) {
 
   if (!inputField || !button) throw new Error('Không tìm thấy form chuyển đổi trên trang affiliate');
 
-  // Ghi nhớ các short link đã có trên trang trước khi submit
+  // Ghi nhớ các short link đã có trên trang + chính các link input để loại trừ
   const existingLinks = new Set(collectAllShortLinks());
+  urls.forEach(u => existingLinks.add(u));
 
   inputField.focus();
   inputField.value = urls.join('\n');

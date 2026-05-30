@@ -199,11 +199,13 @@
 
     function trimTrailing(url) { return url.replace(/[.,;!?)'"\]>]+$/, ''); }
 
+    function toHttps(url) { return url.replace(/^http:\/\//i, 'https://'); }
+
     function extractUrls(text) {
       const re = new RegExp(SHOPEE_URL_RE.source, 'g'), seen = new Set(), urls = [];
       let match;
       while ((match = re.exec(text)) !== null) {
-        const url = trimTrailing(match[0]);
+        const url = toHttps(trimTrailing(match[0]));
         if (!seen.has(url)) { seen.add(url); urls.push(url); }
       }
       return urls;
@@ -212,7 +214,7 @@
     function buildConvertedText(originalText, linkMap) {
       return originalText.replace(new RegExp(SHOPEE_URL_RE.source, 'g'), (match) => {
         const trailing = match.slice(trimTrailing(match).length);
-        const url      = trimTrailing(match);
+        const url      = toHttps(trimTrailing(match));
         return (url in linkMap && linkMap[url] != null) ? linkMap[url] + trailing : match;
       });
     }
