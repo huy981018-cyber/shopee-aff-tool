@@ -15,21 +15,36 @@ if (!window.__shopeeAffToolContentInstalled) {
   });
 }
 
+const BATCH_SIZE = 5;
+
 async function convertUrls(urls) {
-  // Thử batch API trước
-  try {
-    const batchMap = await fetchBatchCustomLink(urls);
-    const allOk = urls.every(url => batchMap[url]?.affLink);
-    if (allOk) {
-      console.log('[content] batch API succeeded for all');
-      return { results: batchMap };
+  const results = {};
+
+  for (let i = 0; i < urls.length; i += BATCH_SIZE) {
+    const batch = urls.slice(i, i + BATCH_SIZE);
+    console.log(`[content] batch ${Math.floor(i / BATCH_SIZE) + 1}`, batch);
+
+    let batchResults;
+    try {
+      const batchMap = await fetchBatchCustomLink(batch);
+      if (batch.every(url => batchMap[url]?.affLink)) {
+        batchResults = batchMap;
+      }
+    } catch (e) {
+      console.warn('[content] batch API failed, falling back to page UI', e.message);
     }
-  } catch (e) {
-    console.warn('[content] batch API failed, falling back to page UI', e.message);
+
+    if (!batchResults) {
+      const ui = await convertAllViaPageUi(batch);
+      batchResults = ui.results;
+    }
+
+    Object.assign(results, batchResults);
+
+    if (i + BATCH_SIZE < urls.length) await sleep(1000);
   }
 
-  // Fallback: gửi tất cả URLs 1 lần qua page UI
-  return await convertAllViaPageUi(urls);
+  return { results };
 }
 
 // ============================================================
