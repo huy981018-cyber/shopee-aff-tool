@@ -150,15 +150,26 @@ async function convertAllViaPageUi(urls) {
   return { results };
 }
 
-async function waitForNewLinks(count, existingLinks) {
-  const start = Date.now();
-  while (Date.now() - start < 8000) {
-    const all = collectAllShortLinks().filter(l => !existingLinks.has(l));
-    if (all.length >= count) return all.slice(0, count);
-    await sleep(200);
-  }
-  // Trả về những gì thu thập được dù chưa đủ
-  return collectAllShortLinks().filter(l => !existingLinks.has(l));
+function waitForNewLinks(count, existingLinks) {
+  return new Promise(resolve => {
+    const timeout = setTimeout(() => {
+      observer.disconnect();
+      resolve(collectAllShortLinks().filter(l => !existingLinks.has(l)));
+    }, 8000);
+
+    const check = () => {
+      const all = collectAllShortLinks().filter(l => !existingLinks.has(l));
+      if (all.length >= count) {
+        clearTimeout(timeout);
+        observer.disconnect();
+        resolve(all.slice(0, count));
+      }
+    };
+
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    check(); // kiểm tra ngay lần đầu
+  });
 }
 
 function collectAllShortLinks() {

@@ -87,17 +87,6 @@
     ⚠️ Server chưa bật — yêu cầu bật server trên điện thoại
   </div>
 
-  <!-- Health status -->
-  <div class="card" style="padding:14px 24px;">
-    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-      <span id="hs-server" style="font-size:13px;">⬜ Server</span>
-      <span id="hs-ext"    style="font-size:13px;">⬜ Extension</span>
-      <span id="hs-ngrok"  style="font-size:13px;">⬜ Ngrok</span>
-      <span id="hs-aff"    style="font-size:13px;">⬜ Affiliate</span>
-      <button class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:6px 14px;" onclick="resetAll()">Reset</button>
-    </div>
-  </div>
-
   <!-- Input -->
   <div class="card">
     <div class="section-title">Chuyển đổi link trong đoạn văn bản</div>
@@ -106,7 +95,7 @@
     <div class="btn-row">
       <button class="btn btn-primary" id="btn-convert" onclick="convertText()" disabled>Chuyển đổi</button>
       <button class="btn btn-secondary" onclick="clearAll()">Xóa</button>
-
+      <button class="btn btn-secondary" onclick="resetAll()">Reset</button>
     </div>
     <div class="progress-bar-wrap" id="progress-wrap">
       <div class="progress-bar" id="progress-bar"></div>
@@ -153,26 +142,13 @@
           const h = await r.json();
           setHealth('hs-server', h.server, 'Server');
           setHealth('hs-ext',    h.extension, 'Extension');
+          setHealth('hs-aff',    h.affiliate_tab ?? null, 'Affiliate');
+          setHealth('hs-ngrok',  true, 'Ngrok'); // nếu fetch được thì ngrok ok
         } catch {
           setHealth('hs-server', false, 'Server');
           setHealth('hs-ext',    false, 'Extension');
-        }
-
-        // Ngrok — kiểm tra bằng cách fetch chính trang này
-        try {
-          const r = await fetch(location.origin + '/api/ping', { cache: 'no-store' });
-          setHealth('hs-ngrok', r.ok, 'Ngrok');
-        } catch {
-          setHealth('hs-ngrok', false, 'Ngrok');
-        }
-
-        // Affiliate tab — extension báo qua health
-        try {
-          const r = await fetch(`${RELAY_BASE}/api/health`);
-          const h = await r.json();
-          setHealth('hs-aff', h.affiliate_tab ?? null, 'Affiliate');
-        } catch {
-          setHealth('hs-aff', null, 'Affiliate');
+          setHealth('hs-ngrok',  false, 'Ngrok');
+          setHealth('hs-aff',    null,  'Affiliate');
         }
 
         await sleep(5000);
@@ -180,15 +156,27 @@
     }
 
     async function resetAll() {
+      // Reset UI
+      const btn = document.getElementById('btn-convert');
+      btn.disabled = false;
+      btn.textContent = 'Chuyển đổi';
+      document.getElementById('progress-wrap').style.display = 'none';
+      document.getElementById('progress-bar').style.width = '0%';
+      document.getElementById('result-tbody').innerHTML = '';
+      document.getElementById('converted-text').value = '';
+      document.getElementById('summary-box').style.display = 'none';
+      document.getElementById('result-count').textContent = '0';
+      document.getElementById('detail-count').textContent = '0';
+      bulkResults = [];
+
+      // Reset relay server
       try {
         await fetch(`${RELAY_BASE}/api/reset`, { method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
         });
-        document.getElementById('banner').textContent = '↺ Đã reset — đang kiểm tra lại...';
-      } catch {
-        alert('Không kết nối được server để reset');
-      }
+      } catch {}
+      checkServer();
     }
 
     // Tự động chọn: extension (laptop) hoặc relay server (điện thoại)
