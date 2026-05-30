@@ -101,3 +101,51 @@ async function sendMessageToTabWithRetry(tabId, message, retries = 2) {
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+// ============================================================
+//  Relay polling — cho điện thoại dùng qua ngrok
+// ============================================================
+
+const RELAY = 'http://localhost:8080';
+
+async function pollRelay() {
+  try {
+    const resp = await fetch(`${RELAY}/api/jobs`);
+    if (!resp.ok) return;
+    const jobs = await resp.json();
+    for (const [jobId, urls] of Object.entries(jobs)) {
+      processRelayJob(jobId, urls);
+    }
+  } catch {}
+}
+
+async function processRelayJob(jobId, urls) {
+  try {
+    let tabs = await chrome.tabs.query({ url: 'https://affiliate.shopee.vn/*' });
+    if (!tabs.length) {
+      const tab = await chrome.tabs.create({ url: 'https://affiliate.shopee.vn/offer/custom_link', active: false });
+      await waitForTab(tab.id);
+      tabs = [tab];
+    }
+    const tabId = tabs[0].id;
+    await injectContentScript(tabId);
+    const result = await sendMessageToTabWithRetry(tabId, { type: 'CONVERT_URLS', urls });
+    const results = {};
+    for (const url of urls) {
+      results[url] = result?.results?.[url] ?? { error: 'Không nhận được kết quả' };
+    }
+    await fetch(`${RELAY}/api/result/${jobId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results }),
+    });
+  } catch (e) {
+    await fetch(`${RELAY}/api/result/${jobId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: e.message }),
+    }).catch(() => {});
+  }
+}
+
+setInterval(pollRelay, 2000);

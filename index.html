@@ -126,52 +126,81 @@
     //  KIỂM TRA SERVER
     // ============================================================
 
-    // Kiểm tra Chrome Extension có đang chạy không
+    const RELAY_BASE = location.origin;
+
+    // Tự động chọn: extension (laptop) hoặc relay server (điện thoại)
     async function checkServer() {
       const banner = document.getElementById('banner');
       const btn    = document.getElementById('btn-convert');
 
-      if (!CONFIG.extension_id || CONFIG.extension_id.trim() === '') {
-        banner.className   = 'banner banner-err';
-        banner.textContent = '⚠️ Chưa cấu hình extension_id trong config.js';
-        btn.disabled = true;
-        return;
+      // Thử kết nối extension trực tiếp
+      if (chrome?.runtime?.sendMessage && CONFIG.extension_id) {
+        try {
+          const result = await sendToExtension({ type: 'PING' });
+          if (result?.ok) {
+            banner.className   = 'banner banner-ok';
+            banner.textContent = '✓ Extension đang chạy — Sẵn sàng chuyển đổi';
+            btn.disabled = false;
+            return;
+          }
+        } catch {}
       }
 
+      // Thử relay server
       try {
-        // Ping extension để kiểm tra có đang chạy không
-        const result = await sendToExtension({ type: 'PING' });
-        if (result?.ok) {
+        const resp = await fetch(`${RELAY_BASE}/api/ping`);
+        const data = await resp.json();
+        if (data?.ok) {
           banner.className   = 'banner banner-ok';
-          banner.textContent = '✓ Extension đang chạy — Sẵn sàng chuyển đổi';
+          banner.textContent = '✓ Relay server sẵn sàng — Sẵn sàng chuyển đổi';
           btn.disabled = false;
-        }
-      } catch {
-        banner.className   = 'banner banner-err';
-        banner.textContent = '⚠️ Không kết nối được Extension — Mở Chrome trên máy tính và bật Extension';
-        btn.disabled = true;
-      }
-    }
-
-    // Gửi message tới Chrome Extension
-    function sendToExtension(message) {
-      console.log('[page] sendToExtension', message);
-      return new Promise((resolve, reject) => {
-        if (!chrome?.runtime?.sendMessage) {
-          console.error('[page] sendToExtension no chrome.runtime.sendMessage');
-          reject(new Error('Chrome Extension API không khả dụng'));
           return;
         }
-        chrome.runtime.sendMessage(CONFIG.extension_id, message, (response) => {
-          if (chrome.runtime.lastError) {
-            console.error('[page] sendToExtension lastError', chrome.runtime.lastError.message);
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            console.log('[page] sendToExtension response', response);
-            resolve(response);
-          }
+      } catch {}
+
+      banner.className   = 'banner banner-err';
+      banner.textContent = '⚠️ Không kết nối được — Chạy start.bat trên máy tính';
+      btn.disabled = true;
+    }
+
+    // Gửi message — tự chọn extension hoặc relay
+    async function sendToExtension(message) {
+      if (chrome?.runtime?.sendMessage && CONFIG.extension_id) {
+        return new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage(CONFIG.extension_id, message, (response) => {
+            if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+            else resolve(response);
+          });
         });
+      }
+      throw new Error('no extension');
+    }
+
+    async function sendConvert(urls) {
+      // Thử extension trực tiếp
+      if (chrome?.runtime?.sendMessage && CONFIG.extension_id) {
+        try {
+          return await sendToExtension({ type: 'CONVERT_LINKS', urls });
+        } catch {}
+      }
+      // Fallback relay
+      return await sendViaRelay(urls);
+    }
+
+    async function sendViaRelay(urls) {
+      const r = await fetch(`${RELAY_BASE}/api/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls }),
       });
+      const { job_id } = await r.json();
+      // Poll kết quả
+      for (let i = 0; i < 60; i++) {
+        await sleep(1000);
+        const res = await fetch(`${RELAY_BASE}/api/result/${job_id}`);
+        if (res.status === 200) return await res.json();
+      }
+      throw new Error('Relay timeout');
     }
 
     async function testPing() {
@@ -181,14 +210,20 @@
         if (result?.ok) {
           banner.className = 'banner banner-ok';
           banner.textContent = '✓ PING thành công — Extension đang phản hồi';
-        } else {
-          banner.className = 'banner banner-err';
-          banner.textContent = '⚠️ PING thất bại — Extension không trả về ok';
+          return;
         }
-      } catch (err) {
-        banner.className = 'banner banner-err';
-        banner.textContent = '⚠️ PING lỗi: ' + err.message;
-      }
+      } catch {}
+      try {
+        const resp = await fetch(`${RELAY_BASE}/api/ping`);
+        const data = await resp.json();
+        if (data?.ok) {
+          banner.className = 'banner banner-ok';
+          banner.textContent = '✓ Relay server đang phản hồi';
+          return;
+        }
+      } catch {}
+      banner.className = 'banner banner-err';
+      banner.textContent = '⚠️ Không kết nối được';
     }
 
     // ============================================================
@@ -222,7 +257,7 @@
 
     // Gửi tất cả URLs cùng lúc cho extension, trả về map { url → affLink | Error }
     async function generateAffLinks(urls) {
-      const result = await sendToExtension({ type: 'CONVERT_LINKS', urls });
+      const result = await sendConvert(urls);
       if (result?.error) throw new Error(result.error);
       return urls.reduce((map, url) => {
         const r = result?.results?.[url];
