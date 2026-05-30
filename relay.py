@@ -70,14 +70,17 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {'ok': True})
 
         elif self.path == '/api/convert':
+            urls = body['urls']
+            batches = max(1, (len(urls) + 4) // 5)
+            timeout = batches * 12  # 12s mỗi batch
             with lock:
                 counter[0] += 1
                 job_id = str(counter[0])
-                jobs[job_id] = {'urls': body['urls'], 'ts': time.time()}
+                jobs[job_id] = {'urls': urls, 'ts': time.time()}
                 ev = threading.Event()
                 result_events[job_id] = ev
             new_job_event.set()
-            ev.wait(timeout=10)
+            ev.wait(timeout=timeout)
             with lock:
                 result = results.pop(job_id, None)
                 result_events.pop(job_id, None)

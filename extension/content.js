@@ -176,7 +176,9 @@ function collectAllShortLinks() {
   const pattern = /https?:\/\/s\.shopee\.vn\/[A-Za-z0-9]+/g;
   const seen = new Set();
   const links = [];
-  for (const el of document.querySelectorAll('input, textarea, div, span, p, label, a')) {
+  // Ưu tiên tìm trong dialog/modal trước, sau đó toàn trang
+  const scope = document.querySelector('[role="dialog"], .ant-modal-body, .shopee-modal') || document.body;
+  for (const el of scope.querySelectorAll('input, textarea, div, span, p, label, a')) {
     const text = getCleanText(el).trim();
     if (!text) continue;
     let m;

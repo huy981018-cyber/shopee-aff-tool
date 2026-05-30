@@ -80,7 +80,6 @@
 </head>
 <body>
   <h1>Shopee Aff Link Converter</h1>
-  <p class="subtitle">Tự động chuyển link Shopee → link affiliate</p>
 
   <!-- Banner trạng thái server -->
   <div id="banner" class="banner banner-err">
@@ -128,32 +127,6 @@
 
     const RELAY_BASE = location.origin;
 
-    function setHealth(id, ok, label) {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.textContent = (ok === true ? '🟢' : ok === false ? '🔴' : '⬜') + ' ' + label;
-    }
-
-    async function healthLoop() {
-      while (true) {
-        // Server + Extension
-        try {
-          const r = await fetch(`${RELAY_BASE}/api/health`);
-          const h = await r.json();
-          setHealth('hs-server', h.server, 'Server');
-          setHealth('hs-ext',    h.extension, 'Extension');
-          setHealth('hs-aff',    h.affiliate_tab ?? null, 'Affiliate');
-          setHealth('hs-ngrok',  true, 'Ngrok'); // nếu fetch được thì ngrok ok
-        } catch {
-          setHealth('hs-server', false, 'Server');
-          setHealth('hs-ext',    false, 'Extension');
-          setHealth('hs-ngrok',  false, 'Ngrok');
-          setHealth('hs-aff',    null,  'Affiliate');
-        }
-
-        await sleep(5000);
-      }
-    }
 
     async function resetAll() {
       // Reset UI
@@ -222,24 +195,22 @@
       ]);
     }
 
-    async function sendToExtension(message) {
+    function sendToExtension(message, ms) {
       if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage && CONFIG.extension_id) {
         return withTimeout(new Promise((resolve, reject) => {
           chrome.runtime.sendMessage(CONFIG.extension_id, message, (response) => {
             if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
             else resolve(response);
           });
-        }));
+        }), ms);
       }
-      throw new Error('no extension');
+      return Promise.reject(new Error('no extension'));
     }
 
     async function sendConvert(urls, ms) {
       if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage && CONFIG.extension_id) {
-        // Laptop: dùng extension trực tiếp, không fallback relay
-        return await withTimeout(sendToExtension({ type: 'CONVERT_LINKS', urls }), ms);
+        return await sendToExtension({ type: 'CONVERT_LINKS', urls }, ms);
       }
-      // Điện thoại: dùng relay
       return await sendViaRelay(urls, ms);
     }
 
@@ -439,7 +410,6 @@
 
     // Kiểm tra server ngay khi tải trang
     checkServer();
-    healthLoop();
   </script>
 </body>
 </html>

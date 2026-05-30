@@ -90,7 +90,7 @@ async function sendMessageToTabWithRetry(tabId, message, retries = 2) {
       lastError = err;
       console.warn(`[background] sendMessage attempt ${attempt} failed`, err.message);
       if (attempt <= retries) {
-        await sleep(500);
+        await sleep(200);
         await injectContentScript(tabId);
       }
     }
