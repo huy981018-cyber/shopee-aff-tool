@@ -134,7 +134,7 @@
       const btn    = document.getElementById('btn-convert');
 
       // Thử kết nối extension trực tiếp
-      if (chrome?.runtime?.sendMessage && CONFIG.extension_id) {
+      if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage && CONFIG.extension_id) {
         try {
           const result = await sendToExtension({ type: 'PING' });
           if (result?.ok) {
@@ -172,7 +172,7 @@
     }
 
     async function sendToExtension(message) {
-      if (chrome?.runtime?.sendMessage && CONFIG.extension_id) {
+      if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage && CONFIG.extension_id) {
         return withTimeout(new Promise((resolve, reject) => {
           chrome.runtime.sendMessage(CONFIG.extension_id, message, (response) => {
             if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
@@ -184,7 +184,7 @@
     }
 
     async function sendConvert(urls, ms) {
-      if (chrome?.runtime?.sendMessage && CONFIG.extension_id) {
+      if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage && CONFIG.extension_id) {
         try {
           return await withTimeout(sendToExtension({ type: 'CONVERT_LINKS', urls }), ms);
         } catch {}

@@ -52,12 +52,12 @@ class Handler(SimpleHTTPRequestHandler):
             with lock:
                 counter[0] += 1
                 job_id = str(counter[0])
-                jobs[job_id] = body['urls']
+                jobs[job_id] = {'urls': body['urls'], 'ts': time.time()}
                 ev = threading.Event()
                 result_events[job_id] = ev
             new_job_event.set()
-            # Block cho đến khi extension trả kết quả (tối đa 120s)
-            ev.wait(timeout=120)
+            # Block cho đến khi extension trả kết quả (tối đa 10s)
+            ev.wait(timeout=10)
             with lock:
                 result = results.pop(job_id, None)
                 result_events.pop(job_id, None)
@@ -101,8 +101,22 @@ class Handler(SimpleHTTPRequestHandler):
 
     def log_message(self, *args): pass
 
+def cleanup_loop():
+    while True:
+        time.sleep(30)
+        now = time.time()
+        with lock:
+            stale = [jid for jid, j in jobs.items()
+                     if isinstance(j, dict) and now - j.get('ts', now) > 10]
+            for jid in stale:
+                jobs.pop(jid, None)
+                ev = result_events.pop(jid, None)
+                if ev:
+                    ev.set()
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 ThreadingTCPServer.allow_reuse_address = True
 ThreadingTCPServer.daemon_threads = True
+threading.Thread(target=cleanup_loop, daemon=True).start()
 print('Server running on http://localhost:8080')
 ThreadingTCPServer(('0.0.0.0', 8080), Handler).serve_forever()

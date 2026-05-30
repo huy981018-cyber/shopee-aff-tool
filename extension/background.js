@@ -115,10 +115,10 @@ async function relayLoop() {
       const resp = await fetch(`${RELAY}/api/jobs`);
       if (!resp.ok) { await sleep(1000); continue; }
       const jobs = await resp.json();
-      for (const [jobId, urls] of Object.entries(jobs)) {
+      for (const [jobId, job] of Object.entries(jobs)) {
         if (!activeJobs.has(jobId)) {
           activeJobs.add(jobId);
-          processRelayJob(jobId, urls);
+          await processRelayJob(jobId, job.urls ?? job); // tuần tự — không spawn song song
         }
       }
     } catch {
