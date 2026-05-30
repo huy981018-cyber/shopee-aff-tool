@@ -20,97 +20,28 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 async function handleConvert(urls, sendResponse) {
   console.log('[background] CONVERT_LINKS received', urls);
   try {
-    const normalizedUrls = [];
+    let tabs = await chrome.tabs.query({ url: 'https://affiliate.shopee.vn/*' });
+    if (!tabs.length) {
+      const tab = await chrome.tabs.create({ url: 'https://affiliate.shopee.vn/offer/custom_link', active: false });
+      await waitForTab(tab.id);
+      tabs = [tab];
+    }
+
+    const tabId = tabs[0].id;
+    await injectContentScript(tabId);
+
+    const result = await sendMessageToTabWithRetry(tabId, { type: 'CONVERT_URLS', urls });
+    console.log('[background] received result', result);
+
     const results = {};
-
-    for (const originalUrl of urls) {
-      const parsed = parseShopeeUrl(originalUrl);
-      if (parsed.type === 'short') {
-        const resolved = await resolveShortLink(originalUrl);
-        const nextParsed = parseShopeeUrl(resolved);
-        if (nextParsed.type !== 'ok') {
-          results[originalUrl] = { error: 'Không giải được short link' };
-          continue;
-        }
-        normalizedUrls.push({ originalUrl, normalizedUrl: `https://shopee.vn/product/${nextParsed.shopId}/${nextParsed.itemId}` });
-      } else if (parsed.type === 'ok') {
-        normalizedUrls.push({ originalUrl, normalizedUrl: `https://shopee.vn/product/${parsed.shopId}/${parsed.itemId}` });
-      } else {
-        results[originalUrl] = { error: parsed.msg };
-      }
+    for (const url of urls) {
+      results[url] = result?.results?.[url] ?? { error: 'Không nhận được kết quả từ content script' };
     }
-
-    console.log('[background] normalizedUrls', normalizedUrls);
-
-    const productUrls = normalizedUrls.map(u => u.normalizedUrl);
-    if (productUrls.length) {
-      // Lấy tab đang mở affiliate.shopee.vn
-      const tabs = await chrome.tabs.query({ url: 'https://affiliate.shopee.vn/*' });
-      console.log('[background] affiliate tabs', tabs.map(t => ({ id: t.id, url: t.url })));
-
-      if (!tabs.length) {
-        const tab = await chrome.tabs.create({
-          url: 'https://affiliate.shopee.vn/offer/custom_link',
-          active: false
-        });
-        await waitForTab(tab.id);
-        tabs.push(tab);
-      }
-
-      const tabId = tabs[0].id;
-      console.log('[background] sending message to tab', tabId);
-
-      await injectContentScript(tabId);
-
-      const result = await sendMessageToTabWithRetry(tabId, {
-        type: 'CONVERT_URLS',
-        urls: productUrls,
-      });
-
-      console.log('[background] received result', result);
-      for (const item of normalizedUrls) {
-        const linkResult = result?.results?.[item.normalizedUrl];
-        if (linkResult) {
-          results[item.originalUrl] = linkResult;
-        } else {
-          results[item.originalUrl] = { error: 'Không nhận được kết quả từ content script' };
-        }
-      }
-    }
-
     sendResponse({ results });
   } catch (e) {
     console.error('[background] error in handleConvert', e);
     sendResponse({ error: e.message });
   }
-}
-
-function parseShopeeUrl(url) {
-  try {
-    const u = new URL(url.trim()), host = u.hostname.replace('www.', '');
-    if (host === 's.shopee.vn' || host === 'shp.ee') return { type: 'short', url };
-    if (!host.includes('shopee.')) return { type: 'error', msg: 'Không phải link Shopee' };
-    const byPath = u.pathname.match(/\/product\/(\d+)\/(\d+)/);
-    if (byPath) return { type: 'ok', shopId: byPath[1], itemId: byPath[2] };
-    const bySlug = u.pathname.match(/-i\.(\d+)\.(\d+)(?:$|[?#])/);
-    if (bySlug) return { type: 'ok', shopId: bySlug[1], itemId: bySlug[2] };
-    const byAlias = u.pathname.match(/^\/[^/]+\/(\d+)\/(\d+)(?:$|[?#])/);
-    if (byAlias) return { type: 'ok', shopId: byAlias[1], itemId: byAlias[2] };
-    const shopId = u.searchParams.get('shopid') || u.searchParams.get('shopId');
-    const itemId = u.searchParams.get('itemid') || u.searchParams.get('itemId');
-    if (shopId && itemId) return { type: 'ok', shopId, itemId };
-    return { type: 'error', msg: 'Không tìm thấy ID sản phẩm' };
-  } catch { return { type: 'error', msg: 'URL không hợp lệ' }; }
-}
-
-async function resolveShortLink(shortUrl) {
-  console.log('[background] resolveShortLink', shortUrl);
-  const resp = await fetch(shortUrl, { method: 'GET', redirect: 'follow' });
-  if (!resp.ok) {
-    throw new Error(`Không resolve được short link (HTTP ${resp.status})`);
-  }
-  console.log('[background] resolveShortLink final url', resp.url);
-  return resp.url;
 }
 
 function waitForTab(tabId, timeout = 30000) {
