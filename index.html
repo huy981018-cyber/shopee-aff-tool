@@ -76,7 +76,6 @@
 
     .detail-title { font-size: 13px; font-weight: 600; color: #666; margin-top: 20px; margin-bottom: 4px; }
     #converted-text { background: #f9f9f9; font-size: 13px; color: #222; }
-    #output-section { display: none; }
   </style>
 </head>
 <body>
@@ -108,7 +107,7 @@
     <div class="section-title">Kết quả (<span id="result-count">0</span> link)</div>
     <div id="summary-box" class="summary-box" style="display:none;"></div>
     <label for="converted-text">Nội dung sau khi thay link aff</label>
-    <textarea id="converted-text" rows="8" readonly></textarea>
+    <textarea id="converted-text" rows="8"></textarea>
     <div class="btn-row">
       <button class="btn btn-copy" onclick="copyOutput(this)">Sao chép nội dung</button>
       <button class="btn btn-secondary" onclick="exportCsv()">Export CSV</button>
@@ -332,7 +331,8 @@
       document.getElementById('converted-text').value      = '';
       document.getElementById('result-tbody').innerHTML    = '';
       document.getElementById('summary-box').style.display = 'none';
-      document.getElementById('output-section').style.display = 'none';
+      document.getElementById('result-count').textContent  = '0';
+      document.getElementById('detail-count').textContent  = '0';
       bulkResults = [];
     }
 
