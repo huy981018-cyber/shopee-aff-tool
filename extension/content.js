@@ -24,30 +24,41 @@ if (!window.__shopeeAffToolContentInstalled) {
 async function convertUrls(urls) {
   const results = {};
 
+  // Gửi tất cả cùng lúc qua batch API
+  let batchMap = {};
+  try {
+    batchMap = await fetchBatchCustomLink(urls);
+  } catch (apiError) {
+    console.warn('[content] batch API failed entirely, will fallback all to page UI', apiError);
+  }
+
+  // Phân loại: thành công giữ luôn, thất bại fallback page UI
+  const fallbackUrls = [];
   for (const url of urls) {
+    const r = batchMap[url];
+    if (r?.affLink) {
+      results[url] = r;
+    } else {
+      fallbackUrls.push(url);
+    }
+  }
+
+  for (const url of fallbackUrls) {
     try {
-      results[url] = await convertOne(url);
+      results[url] = await convertViaPageUi(url);
     } catch (e) {
-      console.error('[content] convertOne error for', url, e);
+      console.error('[content] convertViaPageUi error for', url, e);
       results[url] = { error: e.message };
     }
-    // Delay nhỏ tránh rate limit
     await sleep(300);
   }
 
   return { results };
 }
 
-async function convertOne(url) {
-  try {
-    return await fetchBatchCustomLink(url);
-  } catch (apiError) {
-    console.warn('[content] batch custom link API failed, fallback to page UI', apiError);
-    return await convertViaPageUi(url);
-  }
-}
-
-async function fetchBatchCustomLink(url) {
+// Gửi nhiều URLs cùng lúc, trả về map { url → { affLink } | { error } }
+async function fetchBatchCustomLink(urls) {
+  const csrfToken = getCsrfToken();
   const body = JSON.stringify({
     operationName: 'batchGetCustomLink',
     query: `
@@ -60,38 +71,32 @@ async function fetchBatchCustomLink(url) {
       }
     `,
     variables: {
-      linkParams: [{
+      linkParams: urls.map(url => ({
         originalLink:       url,
         advancedLinkParams: {},
         sourceCaller:       'CUSTOM_LINK_CALLER',
-      }],
+      })),
       sourceCaller: 'CUSTOM_LINK_CALLER',
     }
   });
 
-  // Lấy csrf token từ cookie
-  const csrfToken = getCsrfToken();
-
-  console.log('[content] fetchBatchCustomLink start', { url, csrfToken: csrfToken ? 'yes' : 'no' });
+  console.log('[content] fetchBatchCustomLink start', { count: urls.length, csrfToken: csrfToken ? 'yes' : 'no' });
   const resp = await fetch('/api/v3/gql?q=batchCustomLink', {
     method: 'POST',
     headers: {
       'Content-Type':           'application/json; charset=UTF-8',
       'Accept':                 'application/json, text/plain, */*',
       'Csrf-Token':             csrfToken,
-      'x-csrftoken':           csrfToken,
+      'x-csrftoken':            csrfToken,
       'Affiliate-Program-Type': '1',
-      'X-Requested-With':      'XMLHttpRequest',
+      'X-Requested-With':       'XMLHttpRequest',
       'Referer':                'https://affiliate.shopee.vn/offer/custom_link',
     },
     credentials: 'include',
     body,
   });
 
-  console.log('[content] fetchBatchCustomLink response', { status: resp.status, statusText: resp.statusText });
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
-  }
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
   const json = await resp.json();
   console.log('[content] fetchBatchCustomLink body', json);
 
@@ -99,11 +104,22 @@ async function fetchBatchCustomLink(url) {
     throw new Error('Chưa đăng nhập hoặc session hết hạn');
   }
 
-  const item = json?.data?.batchCustomLink?.[0];
-  if (!item) throw new Error('Không nhận được link');
-  if (item.failCode !== 0) throw new Error('Shopee lỗi: ' + item.failCode);
+  const items = json?.data?.batchCustomLink;
+  if (!items) throw new Error('Không nhận được kết quả từ API');
 
-  return { affLink: item.shortLink || item.longLink };
+  // Map kết quả theo thứ tự linkParams
+  const resultMap = {};
+  urls.forEach((url, i) => {
+    const item = items[i];
+    if (!item) {
+      resultMap[url] = { error: 'Không nhận được link' };
+    } else if (item.failCode !== 0) {
+      resultMap[url] = { error: 'Shopee lỗi: ' + item.failCode };
+    } else {
+      resultMap[url] = { affLink: item.shortLink || item.longLink };
+    }
+  });
+  return resultMap;
 }
 
 async function convertViaPageUi(url) {
@@ -173,11 +189,19 @@ async function waitForAffiliateResult(originalUrl) {
   return null;
 }
 
+function getCleanText(el) {
+  if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return el.value;
+  return Array.from(el.childNodes)
+    .filter(n => n.nodeType === Node.TEXT_NODE)
+    .map(n => n.textContent)
+    .join(' ');
+}
+
 function findShortLinkAnywhere(excludeUrl) {
   const pattern = /https?:\/\/s\.shopee\.vn\/[A-Za-z0-9]+/;
   const elements = Array.from(document.querySelectorAll('input, textarea, div, span, p, label, a'));
   for (const el of elements) {
-    const text = (el.value || el.textContent || '').trim();
+    const text = getCleanText(el).trim();
     if (!text) continue;
     const match = text.match(pattern);
     if (match && match[0] !== excludeUrl) return match[0];
@@ -193,7 +217,7 @@ function findAffiliateResultLinkInDialog() {
 
   const candidates = Array.from(dialog.querySelectorAll('input, textarea, div, span, p, label'));
   for (const el of candidates) {
-    const text = (el.value || el.textContent || '').trim();
+    const text = getCleanText(el).trim();
     if (!text) continue;
     for (const pattern of patterns) {
       const match = text.match(pattern);
