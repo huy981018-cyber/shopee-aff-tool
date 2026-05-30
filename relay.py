@@ -18,30 +18,29 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/api/ping':
             self._json(200, {'ok': True})
+
         elif 'apple-touch-icon' in self.path or 'favicon' in self.path:
             self.send_response(204)
             self._cors()
             self.end_headers()
+
         elif self.path.startswith('/api/jobs'):
-            # Long-poll: giữ connection tối đa 25s cho đến khi có job
+            # Long-poll: block tối đa 25s cho đến khi có job
             deadline = time.time() + 25
             while True:
                 with lock:
-                    if jobs:
-                        try:
-                            self._json(200, dict(jobs))
-                        except Exception:
-                            pass
-                        return
+                    snapshot = dict(jobs) if jobs else None
+                # Lock đã được release trước khi gọi _json
+                if snapshot:
+                    self._json(200, snapshot)
+                    return
                 remaining = deadline - time.time()
                 if remaining <= 0:
-                    try:
-                        self._json(200, {})
-                    except Exception:
-                        pass
+                    self._json(200, {})
                     return
-                new_job_event.wait(timeout=remaining)
+                new_job_event.wait(timeout=min(remaining, 1.0))
                 new_job_event.clear()
+
         else:
             super().do_GET()
 
@@ -54,13 +53,15 @@ class Handler(SimpleHTTPRequestHandler):
                 counter[0] += 1
                 job_id = str(counter[0])
                 jobs[job_id] = body['urls']
-                result_events[job_id] = threading.Event()
+                ev = threading.Event()
+                result_events[job_id] = ev
             new_job_event.set()
             # Block cho đến khi extension trả kết quả (tối đa 120s)
-            result_events[job_id].wait(timeout=120)
+            ev.wait(timeout=120)
             with lock:
                 result = results.pop(job_id, None)
                 result_events.pop(job_id, None)
+                jobs.pop(job_id, None)
             self._json(200, result if result else {'error': 'Timeout'})
 
         elif self.path.startswith('/api/result/'):
@@ -73,26 +74,35 @@ class Handler(SimpleHTTPRequestHandler):
                 ev.set()
             self._json(200, {'ok': True})
 
+    def send_response(self, code, message=None):
+        super().send_response(code, message)
+        # Disable cache để tránh 304 từ Safari/iOS
+        self.send_header('Cache-Control', 'no-store')
+
     def _cors(self):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 
     def _json(self, code, data):
-        body = json.dumps(data).encode()
-        self.send_response(code)
-        self._cors()
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', len(body))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            body = json.dumps(data).encode()
+            self.send_response(code)
+            self._cors()
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', len(body))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception:
+            pass
 
     def handle_error(self, request, client_address):
-        pass  # bỏ qua lỗi kết nối bị ngắt (WinError 10053, BrokenPipe...)
+        pass
 
     def log_message(self, *args): pass
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 ThreadingTCPServer.allow_reuse_address = True
+ThreadingTCPServer.daemon_threads = True
 print('Server running on http://localhost:8080')
 ThreadingTCPServer(('0.0.0.0', 8080), Handler).serve_forever()
