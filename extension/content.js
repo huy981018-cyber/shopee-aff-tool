@@ -24,20 +24,8 @@ async function convertUrls(urls) {
     const batch = urls.slice(i, i + BATCH_SIZE);
     console.log(`[content] batch ${Math.floor(i / BATCH_SIZE) + 1}`, batch);
 
-    let batchResults;
-    try {
-      const batchMap = await fetchBatchCustomLink(batch);
-      if (batch.every(url => batchMap[url]?.affLink)) {
-        batchResults = batchMap;
-      }
-    } catch (e) {
-      console.warn('[content] batch API failed, falling back to page UI', e.message);
-    }
-
-    if (!batchResults) {
-      const ui = await convertAllViaPageUi(batch);
-      batchResults = ui.results;
-    }
+    const ui = await convertAllViaPageUi(batch);
+    const batchResults = ui.results;
 
     Object.assign(results, batchResults);
 
@@ -48,74 +36,17 @@ async function convertUrls(urls) {
 }
 
 // ============================================================
-//  Batch API
-// ============================================================
-
-async function fetchBatchCustomLink(urls) {
-  const csrfToken = getCsrfToken();
-  const body = JSON.stringify({
-    operationName: 'batchGetCustomLink',
-    query: `
-      query batchGetCustomLink($linkParams: [CustomLinkParam!], $sourceCaller: SourceCaller){
-        batchCustomLink(linkParams: $linkParams, sourceCaller: $sourceCaller){
-          shortLink
-          longLink
-          failCode
-        }
-      }
-    `,
-    variables: {
-      linkParams: urls.map(url => ({
-        originalLink:       url,
-        advancedLinkParams: {},
-        sourceCaller:       'CUSTOM_LINK_CALLER',
-      })),
-      sourceCaller: 'CUSTOM_LINK_CALLER',
-    }
-  });
-
-  const resp = await fetch('/api/v3/gql?q=batchCustomLink', {
-    method: 'POST',
-    headers: {
-      'Content-Type':           'application/json; charset=UTF-8',
-      'Accept':                 'application/json, text/plain, */*',
-      'Csrf-Token':             csrfToken,
-      'x-csrftoken':            csrfToken,
-      'Affiliate-Program-Type': '1',
-      'X-Requested-With':       'XMLHttpRequest',
-      'Referer':                'https://affiliate.shopee.vn/offer/custom_link',
-    },
-    credentials: 'include',
-    body,
-  });
-
-  if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
-  const json = await resp.json();
-
-  if (json?.error || json?.is_login === false) throw new Error('Chưa đăng nhập hoặc session hết hạn');
-
-  const items = json?.data?.batchCustomLink;
-  if (!items) throw new Error('Không nhận được kết quả từ API');
-
-  const resultMap = {};
-  urls.forEach((url, i) => {
-    const item = items[i];
-    if (!item || item.failCode !== 0) {
-      resultMap[url] = { error: item ? 'Shopee lỗi: ' + item.failCode : 'Không nhận được link' };
-    } else {
-      resultMap[url] = { affLink: item.shortLink || item.longLink };
-    }
-  });
-  return resultMap;
-}
-
-// ============================================================
 //  Page UI — submit tất cả URLs 1 lần, đọc kết quả theo thứ tự
 // ============================================================
 
+let _cachedInput = null;
+let _cachedButton = null;
+
 async function convertAllViaPageUi(urls) {
-  const inputField = findAffiliateInputField();
-  const button = findAffiliateSubmitButton();
+  if (!_cachedInput?.isConnected) _cachedInput = findAffiliateInputField();
+  if (!_cachedButton?.isConnected) _cachedButton = findAffiliateSubmitButton();
+  const inputField = _cachedInput;
+  const button = _cachedButton;
 
   if (!inputField || !button) throw new Error('Không tìm thấy form chuyển đổi trên trang affiliate');
 
@@ -221,9 +152,5 @@ function getCleanText(el) {
     .join(' ');
 }
 
-function getCsrfToken() {
-  return document.cookie.split(';').map(c => c.trim())
-    .find(c => c.startsWith('csrftoken='))?.replace('csrftoken=', '') || '';
-}
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

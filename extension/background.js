@@ -62,12 +62,10 @@ function waitForTab(tabId, timeout = 30000) {
 }
 
 async function injectContentScript(tabId) {
+  if (injectedTabs.has(tabId)) return;
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content.js'],
-    });
-    console.log('[background] injected content script into tab', tabId);
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    injectedTabs.add(tabId);
   } catch (e) {
     console.warn('[background] injectContentScript failed', e);
   }
@@ -108,6 +106,13 @@ function sleep(ms) {
 
 const RELAY = 'http://localhost:8080';
 const activeJobs = new Set();
+const injectedTabs = new Set();
+
+// Xóa cache khi tab navigate hoặc đóng
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (info.status === 'loading') injectedTabs.delete(tabId);
+});
+chrome.tabs.onRemoved.addListener(tabId => injectedTabs.delete(tabId));
 
 async function relayLoop() {
   while (true) {
