@@ -183,16 +183,16 @@
       throw new Error('no extension');
     }
 
-    async function sendConvert(urls) {
+    async function sendConvert(urls, ms) {
       if (chrome?.runtime?.sendMessage && CONFIG.extension_id) {
         try {
-          return await sendToExtension({ type: 'CONVERT_LINKS', urls });
+          return await withTimeout(sendToExtension({ type: 'CONVERT_LINKS', urls }), ms);
         } catch {}
       }
-      return await sendViaRelay(urls);
+      return await sendViaRelay(urls, ms);
     }
 
-    async function sendViaRelay(urls) {
+    async function sendViaRelay(urls, ms) {
       return withTimeout(async function() {
         const r = await fetch(`${RELAY_BASE}/api/convert`, {
           method: 'POST',
@@ -205,7 +205,7 @@
           const res = await fetch(`${RELAY_BASE}/api/result/${job_id}`);
           if (res.status === 200) return await res.json();
         }
-      }());
+      }(), ms);
     }
 
 
@@ -240,7 +240,9 @@
 
     // Gửi tất cả URLs cùng lúc cho extension, trả về map { url → affLink | Error }
     async function generateAffLinks(urls) {
-      const result = await sendConvert(urls);
+      const batches = Math.ceil(urls.length / 5);
+      const ms = batches * 10000; // 10s mỗi batch
+      const result = await sendConvert(urls, ms);
       if (result?.error) throw new Error(result.error);
       return urls.reduce((map, url) => {
         const r = result?.results?.[url];
