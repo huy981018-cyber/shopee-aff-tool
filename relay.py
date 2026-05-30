@@ -24,11 +24,17 @@ class Handler(SimpleHTTPRequestHandler):
             while True:
                 with lock:
                     if jobs:
-                        self._json(200, dict(jobs))
+                        try:
+                            self._json(200, dict(jobs))
+                        except Exception:
+                            pass
                         return
                 remaining = deadline - time.time()
                 if remaining <= 0:
-                    self._json(200, {})
+                    try:
+                        self._json(200, {})
+                    except Exception:
+                        pass
                     return
                 new_job_event.wait(timeout=remaining)
                 new_job_event.clear()
@@ -76,6 +82,9 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Content-Length', len(body))
         self.end_headers()
         self.wfile.write(body)
+
+    def handle_error(self, request, client_address):
+        pass  # bỏ qua lỗi kết nối bị ngắt (WinError 10053, BrokenPipe...)
 
     def log_message(self, *args): pass
 
