@@ -1,9 +1,12 @@
-from http.server import HTTPServer, SimpleHTTPRequestHandler
-import json, threading, os
+from http.server import SimpleHTTPRequestHandler
+from socketserver import ThreadingTCPServer
+import json, threading, os, time
 
 jobs = {}
 results = {}
+result_events = {}
 lock = threading.Lock()
+new_job_event = threading.Event()
 counter = [0]
 
 class Handler(SimpleHTTPRequestHandler):
@@ -15,32 +18,49 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/api/ping':
             self._json(200, {'ok': True})
-        elif self.path == '/api/jobs':
-            with lock:
-                data = dict(jobs)
-            self._json(200, data)
-        elif self.path.startswith('/api/result/'):
-            job_id = self.path.split('/')[-1]
-            with lock:
-                r = results.pop(job_id, None)
-            self._json(200, r) if r else self._json(204, {})
+        elif self.path.startswith('/api/jobs'):
+            # Long-poll: giữ connection tối đa 25s cho đến khi có job
+            deadline = time.time() + 25
+            while True:
+                with lock:
+                    if jobs:
+                        self._json(200, dict(jobs))
+                        return
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    self._json(200, {})
+                    return
+                new_job_event.wait(timeout=remaining)
+                new_job_event.clear()
         else:
             super().do_GET()
 
     def do_POST(self):
         length = int(self.headers.get('Content-Length', 0))
         body = json.loads(self.rfile.read(length))
+
         if self.path == '/api/convert':
             with lock:
                 counter[0] += 1
                 job_id = str(counter[0])
                 jobs[job_id] = body['urls']
-            self._json(200, {'job_id': job_id})
+                result_events[job_id] = threading.Event()
+            new_job_event.set()
+            # Block cho đến khi extension trả kết quả (tối đa 120s)
+            result_events[job_id].wait(timeout=120)
+            with lock:
+                result = results.pop(job_id, None)
+                result_events.pop(job_id, None)
+            self._json(200, result if result else {'error': 'Timeout'})
+
         elif self.path.startswith('/api/result/'):
             job_id = self.path.split('/')[-1]
             with lock:
                 results[job_id] = body
                 jobs.pop(job_id, None)
+                ev = result_events.get(job_id)
+            if ev:
+                ev.set()
             self._json(200, {'ok': True})
 
     def _cors(self):
@@ -60,5 +80,6 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *args): pass
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+ThreadingTCPServer.allow_reuse_address = True
 print('Server running on http://localhost:8080')
-HTTPServer(('0.0.0.0', 8080), Handler).serve_forever()
+ThreadingTCPServer(('0.0.0.0', 8080), Handler).serve_forever()

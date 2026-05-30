@@ -199,12 +199,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ urls }),
         });
-        const { job_id } = await r.json();
-        while (true) {
-          await sleep(300);
-          const res = await fetch(`${RELAY_BASE}/api/result/${job_id}`);
-          if (res.status === 200) return await res.json();
-        }
+        return await r.json();
       }(), ms);
     }
 

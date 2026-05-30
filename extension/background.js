@@ -109,18 +109,22 @@ function sleep(ms) {
 const RELAY = 'http://localhost:8080';
 const activeJobs = new Set();
 
-async function pollRelay() {
-  try {
-    const resp = await fetch(`${RELAY}/api/jobs`);
-    if (!resp.ok) return;
-    const jobs = await resp.json();
-    for (const [jobId, urls] of Object.entries(jobs)) {
-      if (!activeJobs.has(jobId)) {
-        activeJobs.add(jobId);
-        processRelayJob(jobId, urls);
+async function relayLoop() {
+  while (true) {
+    try {
+      const resp = await fetch(`${RELAY}/api/jobs`);
+      if (!resp.ok) { await sleep(1000); continue; }
+      const jobs = await resp.json();
+      for (const [jobId, urls] of Object.entries(jobs)) {
+        if (!activeJobs.has(jobId)) {
+          activeJobs.add(jobId);
+          processRelayJob(jobId, urls);
+        }
       }
+    } catch {
+      await sleep(1000);
     }
-  } catch {}
+  }
 }
 
 async function processRelayJob(jobId, urls) {
@@ -152,4 +156,4 @@ async function processRelayJob(jobId, urls) {
   }).catch(() => {});
 }
 
-setInterval(pollRelay, 500);
+relayLoop();
