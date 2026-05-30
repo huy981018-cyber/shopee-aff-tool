@@ -155,7 +155,7 @@ async function waitForNewLinks(count, existingLinks) {
   while (Date.now() - start < 30000) {
     const all = collectAllShortLinks().filter(l => !existingLinks.has(l));
     if (all.length >= count) return all.slice(0, count);
-    await sleep(500);
+    await sleep(200);
   }
   // Trả về những gì thu thập được dù chưa đủ
   return collectAllShortLinks().filter(l => !existingLinks.has(l));

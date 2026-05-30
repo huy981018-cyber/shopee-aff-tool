@@ -54,7 +54,7 @@ function waitForTab(tabId, timeout = 30000) {
       if (id === tabId && info.status === 'complete') {
         chrome.tabs.onUpdated.removeListener(listener);
         clearTimeout(timer);
-        setTimeout(resolve, 1000);
+        setTimeout(resolve, 500);
       }
     }
     chrome.tabs.onUpdated.addListener(listener);
@@ -152,4 +152,4 @@ async function processRelayJob(jobId, urls) {
   }).catch(() => {});
 }
 
-setInterval(pollRelay, 2000);
+setInterval(pollRelay, 500);
