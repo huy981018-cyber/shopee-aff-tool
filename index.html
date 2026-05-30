@@ -95,7 +95,7 @@
     <div class="btn-row">
       <button class="btn btn-primary" id="btn-convert" onclick="convertText()" disabled>Chuyển đổi</button>
       <button class="btn btn-secondary" onclick="clearAll()">Xóa</button>
-      <button class="btn btn-secondary" onclick="testPing()">Test PING</button>
+
     </div>
     <div class="progress-bar-wrap" id="progress-wrap">
       <div class="progress-bar" id="progress-bar"></div>
@@ -203,34 +203,12 @@
       throw new Error('Relay timeout');
     }
 
-    async function testPing() {
-      const banner = document.getElementById('banner');
-      try {
-        const result = await sendToExtension({ type: 'PING' });
-        if (result?.ok) {
-          banner.className = 'banner banner-ok';
-          banner.textContent = '✓ PING thành công — Extension đang phản hồi';
-          return;
-        }
-      } catch {}
-      try {
-        const resp = await fetch(`${RELAY_BASE}/api/ping`);
-        const data = await resp.json();
-        if (data?.ok) {
-          banner.className = 'banner banner-ok';
-          banner.textContent = '✓ Relay server đang phản hồi';
-          return;
-        }
-      } catch {}
-      banner.className = 'banner banner-err';
-      banner.textContent = '⚠️ Không kết nối được';
-    }
 
     // ============================================================
     //  XỬ LÝ URL SHOPEE
     // ============================================================
 
-    const SHOPEE_URL_RE = /https?:\/\/(?:s\.shopee\.vn|shp\.ee|(?:www\.)?shopee\.[a-z]+(?:\.[a-z]+)?)[^\s]*/g;
+    const SHOPEE_URL_RE = /https?:\/\/(?:s\.shopee\.vn|(?:[a-z]+\.)?shp\.ee|(?:www\.)?shopee\.[a-z]+(?:\.[a-z]+)?)[^\s]*/g;
 
     function trimTrailing(url) { return url.replace(/[.,;!?)'"\]>]+$/, ''); }
 

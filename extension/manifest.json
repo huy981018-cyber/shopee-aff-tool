@@ -14,7 +14,8 @@
     "https://affiliate.shopee.vn/*",
     "https://s.shopee.vn/*",
     "https://shopee.vn/*",
-    "https://shp.ee/*"
+    "https://shp.ee/*",
+    "https://*.shp.ee/*"
   ],
 
   "externally_connectable": {
