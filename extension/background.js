@@ -163,6 +163,30 @@ async function processRelayJob(jobId, urls) {
 
 relayLoop();
 
+const RELOAD_INTERVAL_MINUTES = 30;
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.alarms.create('reloadCustomLink', { periodInMinutes: RELOAD_INTERVAL_MINUTES });
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  chrome.alarms.create('reloadCustomLink', { periodInMinutes: RELOAD_INTERVAL_MINUTES });
+});
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== 'reloadCustomLink') return;
+  try {
+    const tabs = await chrome.tabs.query({ url: 'https://affiliate.shopee.vn/offer/custom_link' });
+    for (const tab of tabs) {
+      if (tab.id != null) {
+        chrome.tabs.reload(tab.id);
+      }
+    }
+  } catch (e) {
+    console.error('[background] reloadCustomLink alarm failed', e);
+  }
+});
+
 // Heartbeat mỗi 5s để relay biết extension còn sống
 async function heartbeatLoop() {
   while (true) {
