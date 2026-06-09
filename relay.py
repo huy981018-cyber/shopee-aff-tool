@@ -1,6 +1,6 @@
 from http.server import SimpleHTTPRequestHandler
 from socketserver import ThreadingTCPServer
-import json, threading, os, time
+import json, threading, os, time, urllib.request
 
 jobs = {}
 results = {}
@@ -96,6 +96,17 @@ class Handler(SimpleHTTPRequestHandler):
             if ev:
                 ev.set()
             self._json(200, {'ok': True})
+
+        elif self.path == '/api/resolve':
+            url = body.get('url', '')
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'}, method='HEAD')
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resolved = resp.url
+            except Exception as e:
+                self._json(200, {'error': str(e)})
+                return
+            self._json(200, {'resolved': resolved})
 
         elif self.path == '/api/reset':
             with lock:
